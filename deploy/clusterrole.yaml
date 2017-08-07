@@ -16,7 +16,7 @@ rules:
   - services
   verbs:
   - '*'
-- apiGroups: 
+- apiGroups:
   - ""
   resources:
   - namespaces
