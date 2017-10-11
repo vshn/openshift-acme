@@ -13,9 +13,10 @@ import (
 	"github.com/go-playground/log"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	accountlib "github.com/tnozicka/openshift-acme/pkg/openshift/account"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	kerrors "k8s.io/client-go/pkg/api/errors"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	corev1 "k8s.io/client-go/pkg/api/v1"
 )
 
 func hashDomains(domains ...string) string {
@@ -34,7 +35,7 @@ func accountKeyString(account *accountlib.Account) string {
 
 type DbAccountEntry struct {
 	account                 *accountlib.Account
-	kclient                 v1core.CoreV1Interface
+	kclient                 corev1client.CoreV1Interface
 	certificatesMutex       sync.Mutex
 	syncCertificatesChannel chan []*cert.Certificate
 	syncCertificatesWg      sync.WaitGroup
@@ -43,7 +44,7 @@ type DbAccountEntry struct {
 	db                      map[string]*DbCertEntry
 }
 
-func NewDbAccountEntry(ctx context.Context, account *accountlib.Account, kclient v1core.CoreV1Interface) *DbAccountEntry {
+func NewDbAccountEntry(ctx context.Context, account *accountlib.Account, kclient corev1client.CoreV1Interface) *DbAccountEntry {
 	ctx, cancel := context.WithCancel(ctx)
 	e := &DbAccountEntry{
 		account:                 account,
@@ -85,7 +86,7 @@ loop:
 
 			syncTries := 3
 			for i := 0; i < syncTries; i++ {
-				secret, err := e.kclient.Secrets(cachedSecret.Namespace).Get(cachedSecret.Name)
+				secret, err := e.kclient.Secrets(cachedSecret.Namespace).Get(cachedSecret.Name, metav1.GetOptions{})
 				if err != nil {
 					if kerrors.IsNotFound(err) {
 						log.Errorf("SyncCertificates: %s", err)
@@ -118,7 +119,7 @@ loop:
 	}
 }
 
-func (e *DbAccountEntry) GetAccountSecret() (*api_v1.Secret, error) {
+func (e *DbAccountEntry) GetAccountSecret() (*corev1.Secret, error) {
 	e.certificatesMutex.Lock()
 	defer e.certificatesMutex.Unlock()
 
@@ -137,14 +138,14 @@ func (e *DbAccountEntry) AddCertificates(c ...*cert.Certificate) {
 }
 
 type CertDB struct {
-	kclient   v1core.CoreV1Interface
+	kclient   corev1client.CoreV1Interface
 	db        map[string]*DbAccountEntry
 	dbMutex   sync.Mutex
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 }
 
-func NewCertDB(ctx context.Context, kclient v1core.CoreV1Interface) *CertDB {
+func NewCertDB(ctx context.Context, kclient corev1client.CoreV1Interface) *CertDB {
 	ctx, cancel := context.WithCancel(ctx)
 	return &CertDB{
 		db:        make(map[string]*DbAccountEntry),
@@ -223,7 +224,7 @@ func (d *CertDB) GetCertEntryShallowSnapshot() []*DbCertEntry {
 	return r
 }
 
-func (db *CertDB) LoadAccount(ctx context.Context, secret *api_v1.Secret, acmeurl string, updateAccounts bool, updateStatus bool) (err error) {
+func (db *CertDB) LoadAccount(ctx context.Context, secret *corev1.Secret, acmeurl string, updateAccounts bool, updateStatus bool) (err error) {
 	account, err := accountlib.NewAccountFromSecret(secret, acmeurl)
 	if err != nil {
 		err = fmt.Errorf("failed to create an account from secret '%s/%s': %s", secret.Namespace, secret.Name, err)
@@ -275,7 +276,7 @@ func (db *CertDB) LoadAccount(ctx context.Context, secret *api_v1.Secret, acmeur
 }
 
 func (db *CertDB) Bootstrap(ctx context.Context, namespace string, acmeUrl string, updateAccounts bool, updateStatus bool) (err error) {
-	secretList, err := db.kclient.Secrets(namespace).List(api_v1.ListOptions{
+	secretList, err := db.kclient.Secrets(namespace).List(metav1.ListOptions{
 		LabelSelector: accountlib.LabelSelectorAcmeAccount,
 	})
 	if err != nil {

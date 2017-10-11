@@ -74,7 +74,7 @@ script:
       oc create -f ./deploy/service.yaml -f ${deploymentFile}
       sleep 10
       oc status -v
-      oc new-project test-asdf
+      oc login -u system:admin
       make -j64 test-extended GOFLAGS="-race" GO_ET_KUBECONFIG=~/.kube/config GO_ET_DOMAIN=${domain} || (oc logs dc/acme-controller -n acme-asdf; false)
       oc logs dc/acme-controller -n acme-asdf
       oc cluster down

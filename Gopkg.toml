@@ -3,7 +3,7 @@
 
 [[constraint]]
   name = "github.com/go-playground/log"
-  version = "4.2.0"
+  version = "^4.2.0"
 
 [[constraint]]
   name = "github.com/spf13/cobra"
@@ -15,5 +15,75 @@
   name = "github.com/spf13/viper"
 
 [[constraint]]
+  name = "github.com/openshift/origin"
+  revision = "v3.6.0"
+
+[[constraint]]
+  name = "k8s.io/kubernetes"
+  source = "github.com/tnozicka/openshift-k8s.io-kubernetes"
+  revision = "v3.6.0"
+
+[[constraint]]
   name = "k8s.io/client-go"
-  version = "2.0.0"
+  source = "github.com/tnozicka/openshift-k8s.io-client-go"
+  revision = "v3.6.0"
+
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  source = "github.com/tnozicka/openshift-k8s.io-apimachinery"
+  revision = "v3.6.0"
+
+[[override]]
+  name = "k8s.io/apiserver"
+  source = "github.com/tnozicka/openshift-k8s.io-apiserver"
+  revision = "v3.6.0"
+
+[[override]]
+  name = "k8s.io/kube-aggregator"
+  source = "github.com/tnozicka/openshift-k8s.io-kube-aggregator"
+  revision = "v3.6.0"
+
+[[override]]
+  name = "github.com/coreos/etcd"
+  source = "github.com/tnozicka/openshift-github.com-coreos-etcd"
+  revision = "v3.6.0"
+
+[[override]]
+  name = "github.com/docker/engine-api"
+  source = "github.com/tnozicka/openshift-github.com-docker-engine-api"
+  revision = "v3.6.0"
+
+[[override]]
+  name = "github.com/docker/distribution"
+  source = "github.com/tnozicka/openshift-github.com-docker-distribution"
+  revision = "v3.6.0"
+
+[[override]]
+  name = "golang.org/x/exp"
+  source = "https://github.com/golang/exp"
+  revision = "292a51b8d262487dab23a588950e8052d63d9113"
+
+[[override]]
+  name = "github.com/gonum/graph"
+  revision = "bde6d0fbd9dec5a997e906611fe0364001364c41"
+
+[[override]]
+  name = "github.com/google/cadvisor"
+  revision = "2ddeb5f60e22d86c8d1eeb654dfb8bfadf93374c"
+
+[[override]]
+  name = "github.com/opencontainers/runc"
+  revision = "d223e2adae83f62d58448a799a5da05730228089"
+
+[[override]]
+  name = "github.com/containernetworking/cni"
+  revision = "52e4358cbd540cc31f72ea5e0bd4762c98011b84"
+
+[[override]]
+  name = "github.com/russross/blackfriday"
+  revision = "300106c228d52c8941d4b3de6054a6062a86dda3"
+
+[[override]]
+  name = "github.com/elazarl/goproxy"
+  revision = "c4fc26588b6ef8af07a191fcb6476387bdd46711"
+

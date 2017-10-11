@@ -5,8 +5,8 @@ import (
 	"io"
 	"sync"
 
-	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/runtime/serializer/json"
+	"k8s.io/apimachinery/pkg/runtime/serializer/json"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 )
 
@@ -125,7 +125,7 @@ func Put(rc rest.Interface, path string, payload []byte) (body []byte, err error
 }
 
 func Patch(rc rest.Interface, path string, payload []byte) (body []byte, err error) {
-	req := rc.Patch(api.StrategicMergePatchType)
+	req := rc.Patch(types.StrategicMergePatchType)
 	req.RequestURI(path)
 	req.Body(payload)
 	body, err = req.DoRaw()

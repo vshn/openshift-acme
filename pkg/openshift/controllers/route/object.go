@@ -13,10 +13,10 @@ import (
 	oapi "github.com/tnozicka/openshift-acme/pkg/openshift/api"
 	oschallengeexposers "github.com/tnozicka/openshift-acme/pkg/openshift/challengeexposers"
 	"github.com/tnozicka/openshift-acme/pkg/openshift/untypedclient"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	kerrors "k8s.io/client-go/pkg/api/errors"
-	"k8s.io/client-go/pkg/api/unversioned"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clientv1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	corev1 "k8s.io/client-go/pkg/api/v1"
 )
 
 func AcmeRouteHash(r oapi.Route) string {
@@ -41,10 +41,10 @@ func AcmeRouteHash(r oapi.Route) string {
 
 type RouteObject struct {
 	route                      oapi.Route
-	client                     v1core.CoreV1Interface
+	client                     clientv1core.CoreV1Interface
 	selfService                ServiceID
 	exposers                   map[string]acme.ChallengeExposer
-	SelfServiceEndpointSubsets []api_v1.EndpointSubset
+	SelfServiceEndpointSubsets []corev1.EndpointSubset
 }
 
 func (o *RouteObject) GetDomains() []string {
@@ -109,7 +109,7 @@ func (o *RouteObject) UpdateCertificate(c *cert.Certificate) error {
 	namespace := o.GetNamespace()
 
 	var secretExists bool
-	secret, err := o.client.Secrets(namespace).Get(o.GetSecretName())
+	secret, err := o.client.Secrets(namespace).Get(o.GetSecretName(), metav1.GetOptions{})
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			secretExists = false
@@ -175,7 +175,7 @@ func (o *RouteObject) UpdateCertificate(c *cert.Certificate) error {
 	log.Infof("Updating route '%s' in namespace '%s'", name, namespace)
 	// TODO: use PATCH in the future to avoid 409
 	route.ResourceVersion = ""
-	route.CreationTimestamp = unversioned.Time{}
+	route.CreationTimestamp = metav1.Time{}
 	route.SelfLink = ""
 	route.UID = ""
 	body, err := untypedclient.Put(o.client.RESTClient(), url, data)

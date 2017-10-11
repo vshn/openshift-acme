@@ -15,17 +15,18 @@ import (
 	oapi "github.com/tnozicka/openshift-acme/pkg/openshift/api"
 	"github.com/tnozicka/openshift-acme/pkg/openshift/untypedclient"
 	acmelib "golang.org/x/crypto/acme"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	kerrors "k8s.io/client-go/pkg/api/errors"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/util/intstr"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	corev1 "k8s.io/client-go/pkg/api/v1"
 )
 
 type Route struct {
 	UnderlyingExposer          acme.ChallengeExposer
-	Client                     v1core.CoreV1Interface
+	Client                     corev1client.CoreV1Interface
 	Namespace                  string
-	SelfServiceEndpointSubsets []api_v1.EndpointSubset
+	SelfServiceEndpointSubsets []corev1.EndpointSubset
 }
 
 func getDomainHash(domain string) string {
@@ -52,21 +53,21 @@ func (r *Route) Expose(a *acmelib.Client, domain string, token string) error {
 		wg.Add(1)
 		defer wg.Done()
 
-		updateEndpoints := func(endpoints *api_v1.Endpoints) {
+		updateEndpoints := func(endpoints *corev1.Endpoints) {
 			endpoints.Subsets = r.SelfServiceEndpointSubsets
 		}
 
 		for i := 1; i <= maxTries; i++ {
 			log.Debugf("Creating Endpoints %s/%s for exposing (%d/%d)", namespace, tmpName, i, maxTries)
-			endpoints, err := r.Client.Endpoints(namespace).Get(tmpName)
+			endpoints, err := r.Client.Endpoints(namespace).Get(tmpName, metav1.GetOptions{})
 			if err != nil {
 				kerr, ok := err.(*kerrors.StatusError)
 				if ok && kerr.Status().Code == 404 {
 					// There are no endpoints present - this is good
 					// (it means that previous object was properly cleaned)
 					// we will create new one
-					endpoints = &api_v1.Endpoints{
-						ObjectMeta: api_v1.ObjectMeta{
+					endpoints = &corev1.Endpoints{
+						ObjectMeta: metav1.ObjectMeta{
 							Name: tmpName,
 						},
 					}
@@ -116,24 +117,24 @@ func (r *Route) Expose(a *acmelib.Client, domain string, token string) error {
 		wg.Add(1)
 		defer wg.Done()
 
-		updateService := func(service *api_v1.Service) {
+		updateService := func(service *corev1.Service) {
 			service.Spec.ClusterIP = "None"
-			service.Spec.Ports = []api_v1.ServicePort{
+			service.Spec.Ports = []corev1.ServicePort{
 				{Name: "http", Protocol: "TCP", Port: 80, TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: 80}},
 			}
 		}
 
 		for i := 1; i <= maxTries; i++ {
 			log.Debugf("Creating Service %s/%s for exposing (%d/%d)", namespace, tmpName, i, maxTries)
-			service, err := r.Client.Services(namespace).Get(tmpName)
+			service, err := r.Client.Services(namespace).Get(tmpName, metav1.GetOptions{})
 			if err != nil {
 				kerr, ok := err.(*kerrors.StatusError)
 				if ok && kerr.Status().Code == 404 {
 					// There is no service present - this is good
 					// (it means that previous object was properly cleaned)
 					// we will create new one
-					service = &api_v1.Service{
-						ObjectMeta: api_v1.ObjectMeta{
+					service = &corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{
 							Name: tmpName,
 						},
 					}
@@ -209,7 +210,7 @@ func (r *Route) Expose(a *acmelib.Client, domain string, token string) error {
 					// There is no route present - this is good
 					// (it means that previous object was properly cleaned)
 					// we will create new one
-					route.ObjectMeta = api_v1.ObjectMeta{
+					route.ObjectMeta = metav1.ObjectMeta{
 						Name: tmpName,
 					}
 					updateRoute(&route)
@@ -290,7 +291,7 @@ func (r *Route) Remove(a *acmelib.Client, domain string, token string) error {
 		wg.Add(1)
 		defer wg.Done()
 
-		err := r.Client.Services(namespace).Delete(tmpName, &api_v1.DeleteOptions{})
+		err := r.Client.Services(namespace).Delete(tmpName, &metav1.DeleteOptions{})
 		if err != nil {
 			log.Errorf("route challenge exposer: deleting service '%s/%s' failed: %s", namespace, tmpName, err)
 			return

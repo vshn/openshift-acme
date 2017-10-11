@@ -14,7 +14,8 @@ import (
 	"github.com/tnozicka/openshift-acme/pkg/acme"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	acmelib "golang.org/x/crypto/acme"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/client-go/pkg/api/v1"
 )
 
 const (
@@ -38,10 +39,10 @@ type Account struct {
 	Client         acme.Client
 	Certificates   []*cert.Certificate
 	authorizations []*Authorization
-	Secret         *api_v1.Secret
+	Secret         *corev1.Secret
 }
 
-func NewAccountFromSecret(secret *api_v1.Secret, acmeUrl string) (a *Account, err error) {
+func NewAccountFromSecret(secret *corev1.Secret, acmeUrl string) (a *Account, err error) {
 	if secret.Data == nil {
 		err = errors.New("malformed acme account: missing Data")
 		return
@@ -112,11 +113,11 @@ func NewAccountFromSecret(secret *api_v1.Secret, acmeUrl string) (a *Account, er
 	return
 }
 
-func (a *Account) ToSecret() (*api_v1.Secret, error) {
+func (a *Account) ToSecret() (*corev1.Secret, error) {
 	if a.Secret == nil {
 		// we are creating new secret
-		a.Secret = &api_v1.Secret{
-			ObjectMeta: api_v1.ObjectMeta{
+		a.Secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
 					LabelAcmeTypeKey: LabelAcmeAccountType,
 				},

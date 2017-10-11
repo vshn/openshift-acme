@@ -11,9 +11,9 @@ import (
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	accountlib "github.com/tnozicka/openshift-acme/pkg/openshift/account"
 	acmelib "golang.org/x/crypto/acme"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	kerrors "k8s.io/client-go/pkg/api/errors"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
 type AcmeObject interface {
@@ -26,7 +26,7 @@ type AcmeObject interface {
 }
 
 type AcmeController struct {
-	kclient              v1core.CoreV1Interface
+	kclient              corev1client.CoreV1Interface
 	acmeDirectoryUrl     string
 	ctx                  context.Context
 	wg                   sync.WaitGroup
@@ -37,7 +37,7 @@ type AcmeController struct {
 	watchNamespaces      []string
 }
 
-func NewAcmeController(ctx context.Context, kclient v1core.CoreV1Interface, acmeDirectoryUrl string, watchNamespaces []string) (rc *AcmeController) {
+func NewAcmeController(ctx context.Context, kclient corev1client.CoreV1Interface, acmeDirectoryUrl string, watchNamespaces []string) (rc *AcmeController) {
 	rc = &AcmeController{
 		ctx:              ctx,
 		kclient:          kclient,
@@ -171,7 +171,7 @@ func (rc *AcmeController) Wait() {
 }
 
 func (ac *AcmeController) AcmeAccount(namespace string) (a *accountlib.Account, err error) {
-	secretList, err := ac.kclient.Secrets(namespace).List(api_v1.ListOptions{
+	secretList, err := ac.kclient.Secrets(namespace).List(metav1.ListOptions{
 		LabelSelector: accountlib.LabelSelectorAcmeAccount,
 	})
 	if err != nil {

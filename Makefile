@@ -6,7 +6,7 @@ SHELL :=/bin/bash
 
 GOFMT :=gofmt -s
 GOIMPORTS :=goimports -e
-GOFLAGS :=
+GOFLAGS :=-v
 
 GO_FILES :=$(shell find . -name '*.go' -not -path './vendor/*' -print)
 GO_PACKAGES := ./cmd/... ./pkg/...
@@ -29,12 +29,12 @@ install:
 
 .PHONY: test
 test:
-	go test -i -v $(GOFLAGS) $(GO_PACKAGES)
+	go test -i $(GOFLAGS) $(GO_PACKAGES)
 	go test $(GOFLAGS) $(GO_PACKAGES)
 
 .PHONY: test-extended
 test-extended:
-	go test $(GOFLAGS) $(GO_PACKAGES_TEST) -kubeconfig $(GO_ET_KUBECONFIG) -domain $(GO_ET_DOMAIN)
+	export KUBECONFIG=$(GO_ET_KUBECONFIG) && go test $(GOFLAGS) $(GO_PACKAGES_TEST) -domain $(GO_ET_DOMAIN)
 
 .PHONY: checks
 checks: check-gofmt check-goimports check-govet
@@ -73,15 +73,24 @@ format-gofmt:
 format-goimports:
 	$(GOIMPORTS) -w $(GO_FILES)
 
+define dep-prune:=
+dep prune $(GOFLAGS)
+find ./vendor/ -type f -name '*_test.go' -not -name '*.go'
+endef
+
 .PHONY: ensure-vendor
 ensure-vendor:
-	dep ensure
-	dep prune
+	dep ensure $(GOFLAGS)
+	$(call dep-prune)
 
 .PHONY: update-vendor
 update-vendor:
-	dep ensure -update
-	dep prune
+	dep ensure -update $(GOFLAGS)
+	$(call dep-prune)
+
+.PHONY: prune-vendor
+prune-vendor:
+	$(call dep-prune)
 
 .PHONY: image
 image:

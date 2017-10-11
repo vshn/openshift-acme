@@ -13,9 +13,9 @@ import (
 	oapi "github.com/tnozicka/openshift-acme/pkg/openshift/api"
 	acme_controller "github.com/tnozicka/openshift-acme/pkg/openshift/controllers/acme"
 	"github.com/tnozicka/openshift-acme/pkg/openshift/untypedclient"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/pkg/api/unversioned"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	corev1 "k8s.io/client-go/pkg/api/v1"
 )
 
 type ServiceID struct {
@@ -24,19 +24,19 @@ type ServiceID struct {
 }
 
 type RouteController struct {
-	client      v1core.CoreV1Interface
+	client      corev1client.CoreV1Interface
 	ctx         context.Context
 	acme        *acme_controller.AcmeController
 	exposers    map[string]acme.ChallengeExposer
 	wg          sync.WaitGroup
 	selfService ServiceID
 	// TODO: update IP and port in a goroutine if someone were to change them; protect by RW mutex
-	selfServiceEndpointSubsets []api_v1.EndpointSubset
+	selfServiceEndpointSubsets []corev1.EndpointSubset
 	watchNamespaces            []string
 	resourceVersions           map[string]string // namespace => resourceVersion
 }
 
-func NewRouteController(ctx context.Context, client v1core.CoreV1Interface, acme *acme_controller.AcmeController,
+func NewRouteController(ctx context.Context, client corev1client.CoreV1Interface, acme *acme_controller.AcmeController,
 	exposers map[string]acme.ChallengeExposer, selfService ServiceID, watchNamespaces []string) (rc RouteController, err error) {
 	rc.client = client
 	rc.acme = acme
@@ -88,7 +88,7 @@ func (rc *RouteController) doWatchIteration(namespace string) error {
 
 			switch event.Type {
 			case "ERROR":
-				var status unversioned.Status
+				var status metav1.Status
 				if err := json.Unmarshal(event.Object, &status); err != nil {
 					log.Error(err)
 					return fmt.Errorf("RouteController: failed to unmarshal Status: '%s'", err)
@@ -220,7 +220,7 @@ func (rc *RouteController) Wait() {
 }
 
 func (rc *RouteController) UpdateSelfServiceEndpointSubsets() (err error) {
-	service, err := rc.client.Services(rc.selfService.Namespace).Get(rc.selfService.Name)
+	service, err := rc.client.Services(rc.selfService.Namespace).Get(rc.selfService.Name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("RouteController could not find its own service: '%s'", err)
 	}
@@ -231,7 +231,7 @@ func (rc *RouteController) UpdateSelfServiceEndpointSubsets() (err error) {
 	case "None":
 		// this is a headless service; go for endpoints directly
 		// usually a case for development setups
-		endpoints, err := rc.client.Endpoints(rc.selfService.Namespace).Get(rc.selfService.Name)
+		endpoints, err := rc.client.Endpoints(rc.selfService.Namespace).Get(rc.selfService.Name, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("RouteController could not find corresponding endpoints to its own service: '%s'", err)
 		}
@@ -239,14 +239,14 @@ func (rc *RouteController) UpdateSelfServiceEndpointSubsets() (err error) {
 		rc.selfServiceEndpointSubsets = endpoints.Subsets
 	default:
 		// for regular service we will use static and load-balanced ClusterIP
-		ports := []api_v1.EndpointPort{}
+		ports := []corev1.EndpointPort{}
 		for _, svc_port := range service.Spec.Ports {
-			ports = append(ports, api_v1.EndpointPort{Port: svc_port.Port})
+			ports = append(ports, corev1.EndpointPort{Port: svc_port.Port})
 		}
 
-		rc.selfServiceEndpointSubsets = []api_v1.EndpointSubset{
+		rc.selfServiceEndpointSubsets = []corev1.EndpointSubset{
 			{
-				Addresses: []api_v1.EndpointAddress{
+				Addresses: []corev1.EndpointAddress{
 					{
 						IP: service.Spec.ClusterIP,
 					},

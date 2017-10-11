@@ -3,8 +3,7 @@ package api
 import (
 	"time"
 
-	"k8s.io/client-go/pkg/api/unversioned"
-	apiv1 "k8s.io/client-go/pkg/api/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type RouteTargetReference struct {
@@ -54,8 +53,8 @@ type RouteStatus struct {
 }
 
 type Route struct {
-	unversioned.TypeMeta `json:",inline"`
-	apiv1.ObjectMeta     `json:"metadata,omitempty"`
-	Spec                 RouteSpec   `json:"spec"`
-	Status               RouteStatus `json:"status"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              RouteSpec   `json:"spec"`
+	Status            RouteStatus `json:"status"`
 }

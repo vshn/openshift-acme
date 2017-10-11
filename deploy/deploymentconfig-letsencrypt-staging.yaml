@@ -13,6 +13,7 @@ spec:
       labels:
         app: acme-controller
     spec:
+      serviceAccountName: "acme-controller"
       containers:
       - name: acme-controller
         image: "docker.io/tnozicka/openshift-acme"
