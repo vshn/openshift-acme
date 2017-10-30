@@ -2,10 +2,16 @@
 
 
 [[projects]]
+  branch = "default"
+  name = "bitbucket.org/ww/goautoneg"
+  packages = ["."]
+  revision = "75cd24fc2f2c2a2088577d12123ddee5f54e0675"
+
+[[projects]]
   name = "cloud.google.com/go"
   packages = ["compute/metadata"]
-  revision = "44bcd0b2078ba5e7fedbeb36808d1ed893534750"
-  version = "v0.11.0"
+  revision = "eaddaf6dd7ee35fd3c2420c8d27478db176b0485"
+  version = "v0.15.0"
 
 [[projects]]
   branch = "master"
@@ -14,16 +20,16 @@
   revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
 
 [[projects]]
+  name = "github.com/Azure/go-autorest"
+  packages = ["autorest","autorest/adal","autorest/azure","autorest/date"]
+  revision = "7aa5b8a6f18b5c15910c767ab005fc4585221177"
+  version = "v9.1.1"
+
+[[projects]]
   branch = "master"
   name = "github.com/MakeNowJust/heredoc"
   packages = ["."]
   revision = "bb23615498cded5e105af4ce27de75b089cbe851"
-
-[[projects]]
-  name = "github.com/Microsoft/go-winio"
-  packages = ["."]
-  revision = "78439966b38d69bf38227fbf57ac8a6fee70f69a"
-  version = "v0.4.5"
 
 [[projects]]
   name = "github.com/PuerkitoBio/purell"
@@ -38,16 +44,34 @@
   revision = "de5bf2ad457846296e2031421a34e2568e304e35"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/RangelReale/osin"
+  packages = ["."]
+  revision = "829186e6c125f77df6d6ae0162a9ba59fad91e2d"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/RangelReale/osincli"
+  packages = ["."]
+  revision = "fababb0555f21315d1a34af6615a16eaab44396b"
+
+[[projects]]
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
-  revision = "a3f95b5c423586578a4e099b11a46c2479628cac"
-  version = "1.0.2"
+  revision = "f006c2ac4710855cf0f916dd6b77acf6b048dc6e"
+  version = "v1.0.3"
 
 [[projects]]
   branch = "master"
   name = "github.com/apcera/gssapi"
   packages = ["."]
   revision = "5fb4217df13b8e6878046fe1e5c10e560e1b86dc"
+
+[[projects]]
+  name = "github.com/asaskevich/govalidator"
+  packages = ["."]
+  revision = "73945b6115bfbbcc57d89b7316e28109364124e1"
+  version = "v7"
 
 [[projects]]
   branch = "master"
@@ -62,30 +86,6 @@
   version = "v3.5.1"
 
 [[projects]]
-  name = "github.com/coreos/etcd"
-  packages = ["auth/authpb","client","clientv3","etcdserver/api/v3rpc/rpctypes","etcdserver/etcdserverpb","mvcc/mvccpb","pkg/pathutil","pkg/srv","pkg/tlsutil","pkg/transport","pkg/types","version"]
-  revision = "v3.6.0"
-  source = "github.com/tnozicka/openshift-github.com-coreos-etcd"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/coreos/go-oidc"
-  packages = ["http","jose","key","oauth2","oidc"]
-  revision = "a4973d9a4225417aecf5d450a9522f00c1f7130f"
-
-[[projects]]
-  name = "github.com/coreos/go-semver"
-  packages = ["semver"]
-  revision = "8ab6407b697782a06568d4b7f1db25550ec2e4c6"
-  version = "v0.2.0"
-
-[[projects]]
-  name = "github.com/coreos/pkg"
-  packages = ["health","httputil","timeutil"]
-  revision = "3ac0863d7acf3bc44daf49afef8919af12f704ef"
-  version = "v3"
-
-[[projects]]
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
@@ -94,50 +94,56 @@
 [[projects]]
   name = "github.com/dgrijalva/jwt-go"
   packages = ["."]
-  revision = "d2709f9f1f31ebcda9651b03077758c1f3a0018c"
-  version = "v3.0.0"
+  revision = "dbeaa9332f19a944acb5736b4456cfcc02140e29"
+  version = "v3.1.0"
 
 [[projects]]
   name = "github.com/docker/distribution"
-  packages = [".","context","digest","manifest","manifest/schema1","manifest/schema2","reference","registry/api/errcode","registry/api/v2","registry/client","registry/client/auth","registry/client/transport","registry/storage/cache","registry/storage/cache/memory","uuid"]
-  revision = "v3.6.0"
+  packages = ["digest","reference"]
+  revision = "v3.7.0-rc.0"
   source = "github.com/tnozicka/openshift-github.com-docker-distribution"
 
 [[projects]]
   name = "github.com/docker/docker"
-  packages = ["api/types","api/types/blkiodev","api/types/container","api/types/filters","api/types/mount","api/types/network","api/types/registry","api/types/strslice","api/types/swarm","api/types/versions","opts","pkg/archive","pkg/fileutils","pkg/homedir","pkg/idtools","pkg/ioutils","pkg/jsonlog","pkg/jsonmessage","pkg/longpath","pkg/pools","pkg/promise","pkg/stdcopy","pkg/system","pkg/term","pkg/term/windows"]
+  packages = ["pkg/term","pkg/term/windows"]
   revision = "092cba3727bb9b4a2f0e922cd6c0f93ea270e363"
   version = "v1.13.1"
 
 [[projects]]
   name = "github.com/docker/engine-api"
   packages = ["types","types/blkiodev","types/container","types/filters","types/network","types/registry","types/strslice","types/versions"]
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
   source = "github.com/tnozicka/openshift-github.com-docker-engine-api"
 
 [[projects]]
   name = "github.com/docker/go-connections"
   packages = ["nat"]
-  revision = "990a1a1a70b0da4c4cb70e117971a4f0babfbf1a"
-  version = "v0.2.1"
+  revision = "3ede32e2033de7505e6500d6c868c2b9ed9f169d"
+  version = "v0.3.0"
 
 [[projects]]
   name = "github.com/docker/go-units"
   packages = ["."]
-  revision = "f2d77a61e3c169b43402a0a1e84f06daf29b8190"
-  version = "v0.3.1"
+  revision = "0dadbb0345b35ec7ef35e228dabb8de89a65bf52"
+  version = "v0.3.2"
 
 [[projects]]
   branch = "master"
-  name = "github.com/docker/libtrust"
-  packages = ["."]
-  revision = "aabc10ec26b754e797f9028f4589c5b7bd90dc20"
+  name = "github.com/docker/spdystream"
+  packages = [".","spdy"]
+  revision = "bc6354cbbc295e925e4c611ffe90c1f287ee54db"
 
 [[projects]]
   name = "github.com/emicklei/go-restful"
-  packages = [".","log","swagger"]
-  revision = "777bb3f19bcafe2575ffb2a3e46af92509ae9594"
-  version = "v1.2"
+  packages = [".","log"]
+  revision = "5741799b275a3c4a5a9623a993576d7545cf7b5c"
+  version = "v2.4.0"
+
+[[projects]]
+  name = "github.com/emicklei/go-restful-swagger12"
+  packages = ["."]
+  revision = "dcef7f55730566d41eae5db10e7d6981829720f6"
+  version = "1.0.1"
 
 [[projects]]
   branch = "master"
@@ -152,22 +158,34 @@
   revision = "d6023ce2651d8eafb5c75bb0c7167536102ec9f5"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/fatih/camelcase"
+  packages = ["."]
+  revision = "44e46d280b43ec1531bb25252440e34f1b800b65"
+
+[[projects]]
   name = "github.com/fsnotify/fsnotify"
   packages = ["."]
   revision = "629574ca2a5df945712d3079857300b5e4da0236"
   version = "v1.4.2"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/fsouza/go-dockerclient"
-  packages = ["."]
-  revision = "75772940379e725b5aae213e570f9dcd751951cb"
-
-[[projects]]
   name = "github.com/ghodss/yaml"
   packages = ["."]
   revision = "0ca9ea5df5451ffdf184b4428c902747c2c11cd7"
   version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/go-openapi/analysis"
+  packages = ["."]
+  revision = "8ed83f2ea9f00f945516462951a288eaa68bf0d6"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/go-openapi/errors"
+  packages = ["."]
+  revision = "03cfca65330da08a5a440053faf994a3c682b5bf"
 
 [[projects]]
   branch = "master"
@@ -183,9 +201,21 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/go-openapi/loads"
+  packages = ["."]
+  revision = "c3e1ca4c0b6160cac10aeef7e8b425cc95b9c820"
+
+[[projects]]
+  branch = "master"
   name = "github.com/go-openapi/spec"
   packages = ["."]
-  revision = "3faa0055dbbf2110abc1f3b4e3adbb22721e96e7"
+  revision = "84b5bee7bcb76f3d17bcbaf421bac44bd5709ca6"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/go-openapi/strfmt"
+  packages = ["."]
+  revision = "610b6cacdcde6852f4de68998bd20ce1dac85b22"
 
 [[projects]]
   branch = "master"
@@ -208,8 +238,8 @@
 [[projects]]
   name = "github.com/gogo/protobuf"
   packages = ["proto","sortkeys"]
-  revision = "100ba4e885062801d56799d78530b73b178a78f3"
-  version = "v0.4"
+  revision = "342cbe0a04158f6dcb03ca0079991a51a4248c02"
+  version = "v0.5"
 
 [[projects]]
   branch = "master"
@@ -226,8 +256,8 @@
 [[projects]]
   branch = "master"
   name = "github.com/golang/protobuf"
-  packages = ["proto","ptypes/any"]
-  revision = "1909bc2f63dc92bb931deace8b8312c4db72d12f"
+  packages = ["proto"]
+  revision = "1643683e1b54a9e88ad26d98f81400c8c9d9f4f9"
 
 [[projects]]
   branch = "master"
@@ -277,15 +307,15 @@
   version = "v1.1"
 
 [[projects]]
-  name = "github.com/gorilla/mux"
+  name = "github.com/gorilla/securecookie"
   packages = ["."]
-  revision = "bcd8bc72b08df0f70df986b97f95590779502d31"
-  version = "v1.4.0"
+  revision = "667fe4e3466a040b780561fe9b51a83a3753eefc"
+  version = "v1.1"
 
 [[projects]]
-  name = "github.com/grpc-ecosystem/go-grpc-prometheus"
+  name = "github.com/gorilla/sessions"
   packages = ["."]
-  revision = "6b7015e65d366bf3f19b2b2a000a831940f0f7e0"
+  revision = "ca9ada44574153444b00d3fd9c8559e4cc95f896"
   version = "v1.1"
 
 [[projects]]
@@ -298,7 +328,7 @@
   branch = "master"
   name = "github.com/hashicorp/hcl"
   packages = [".","hcl/ast","hcl/parser","hcl/scanner","hcl/strconv","hcl/token","json/parser","json/scanner","json/token"]
-  revision = "392dba7d905ed5d04a5794ba89f558b27e2ba1ca"
+  revision = "23c074d0eceb2b8a5bfdbb271ab780cde70f05a8"
 
 [[projects]]
   branch = "master"
@@ -309,8 +339,8 @@
 [[projects]]
   name = "github.com/imdario/mergo"
   packages = ["."]
-  revision = "3e95a51e0639b4cf372f2ccf74c86749d747fbdc"
-  version = "0.2.2"
+  revision = "7fe0c75c13abdee74b09fcacef5ea1c6bba6a874"
+  version = "0.2.4"
 
 [[projects]]
   name = "github.com/inconshreveable/mousetrap"
@@ -319,16 +349,10 @@
   version = "v1.0"
 
 [[projects]]
-  name = "github.com/jonboulle/clockwork"
-  packages = ["."]
-  revision = "2eee05ed794112d45db504eb05aa693efd2b8b09"
-  version = "v0.1.0"
-
-[[projects]]
   branch = "master"
   name = "github.com/juju/ratelimit"
   packages = ["."]
-  revision = "5b9ff866471762aa2ab2dced63c9fb6f53921342"
+  revision = "59fac5042749a5afb9af70e813da1dd5474f0167"
 
 [[projects]]
   name = "github.com/magiconair/properties"
@@ -340,7 +364,7 @@
   branch = "master"
   name = "github.com/mailru/easyjson"
   packages = ["buffer","jlexer","jwriter"]
-  revision = "2f5df55504ebc322e4d52d34df6a1f5b503bf26d"
+  revision = "4d347d79dea0067c945f374f990601decb08abb5"
 
 [[projects]]
   name = "github.com/matttproud/golang_protobuf_extensions"
@@ -358,7 +382,7 @@
   branch = "master"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
-  revision = "d0303fe809921458f417bcf828397a65db30a7e4"
+  revision = "06020f85339e21b2478f756a78e295255ffa4d6a"
 
 [[projects]]
   name = "github.com/onsi/ginkgo"
@@ -373,14 +397,9 @@
   version = "v1.2.0"
 
 [[projects]]
-  name = "github.com/opencontainers/runc"
-  packages = ["libcontainer/system","libcontainer/user"]
-  revision = "d223e2adae83f62d58448a799a5da05730228089"
-
-[[projects]]
   name = "github.com/openshift/origin"
-  packages = ["pkg/api","pkg/api/extension","pkg/api/graph","pkg/api/graph/graphview","pkg/api/install","pkg/api/kubegraph","pkg/api/kubegraph/analysis","pkg/api/kubegraph/nodes","pkg/api/latest","pkg/authorization/apis/authorization","pkg/authorization/apis/authorization/install","pkg/authorization/apis/authorization/v1","pkg/authorization/reaper","pkg/build/admission/defaults/api","pkg/build/admission/defaults/api/install","pkg/build/admission/defaults/api/v1","pkg/build/admission/overrides/api","pkg/build/admission/overrides/api/install","pkg/build/admission/overrides/api/v1","pkg/build/apis/build","pkg/build/apis/build/install","pkg/build/apis/build/v1","pkg/build/cmd","pkg/build/generated/listers/build/internalversion","pkg/build/graph","pkg/build/graph/analysis","pkg/build/graph/nodes","pkg/build/util","pkg/client","pkg/client/testclient","pkg/cmd/cli/cmd/errors","pkg/cmd/cli/config","pkg/cmd/cli/describe","pkg/cmd/errors","pkg/cmd/flagtypes","pkg/cmd/server/api","pkg/cmd/server/api/install","pkg/cmd/server/api/v1","pkg/cmd/server/bootstrappolicy","pkg/cmd/util","pkg/cmd/util/clientcmd","pkg/cmd/util/pem","pkg/cmd/util/prefixwriter","pkg/cmd/util/term","pkg/cmd/util/tokencmd","pkg/deploy/apis/apps","pkg/deploy/apis/apps/install","pkg/deploy/apis/apps/v1","pkg/deploy/cmd","pkg/deploy/graph","pkg/deploy/graph/analysis","pkg/deploy/graph/nodes","pkg/deploy/util","pkg/dockerregistry","pkg/image/admission/imagepolicy/api","pkg/image/admission/imagepolicy/api/install","pkg/image/admission/imagepolicy/api/v1","pkg/image/apis/image","pkg/image/apis/image/docker10","pkg/image/apis/image/dockerpre012","pkg/image/apis/image/install","pkg/image/apis/image/v1","pkg/image/graph","pkg/image/graph/nodes","pkg/image/importer","pkg/image/reference","pkg/image/util","pkg/ingress/admission/api","pkg/ingress/admission/api/install","pkg/ingress/admission/api/v1","pkg/oauth/apis/oauth","pkg/oauth/apis/oauth/install","pkg/oauth/apis/oauth/v1","pkg/project/admission/requestlimit/api","pkg/project/admission/requestlimit/api/install","pkg/project/admission/requestlimit/api/v1","pkg/project/apis/project","pkg/project/apis/project/helpers","pkg/project/apis/project/install","pkg/project/apis/project/v1","pkg/project/generated/clientset","pkg/project/generated/clientset/scheme","pkg/project/generated/clientset/typed/project/v1","pkg/quota/admission/clusterresourceoverride/api","pkg/quota/admission/clusterresourceoverride/api/install","pkg/quota/admission/clusterresourceoverride/api/v1","pkg/quota/admission/runonceduration/api","pkg/quota/admission/runonceduration/api/install","pkg/quota/admission/runonceduration/api/v1","pkg/quota/apis/quota","pkg/quota/apis/quota/install","pkg/quota/apis/quota/v1","pkg/quota/util","pkg/route/apis/route","pkg/route/apis/route/install","pkg/route/apis/route/v1","pkg/route/generated/clientset","pkg/route/generated/clientset/scheme","pkg/route/generated/clientset/typed/route/v1","pkg/route/generator","pkg/route/graph","pkg/route/graph/analysis","pkg/route/graph/nodes","pkg/scheduler/admission/podnodeconstraints/api","pkg/scheduler/admission/podnodeconstraints/api/install","pkg/scheduler/admission/podnodeconstraints/api/v1","pkg/sdn/apis/network","pkg/sdn/apis/network/install","pkg/sdn/apis/network/v1","pkg/security/apis/security","pkg/security/apis/security/install","pkg/security/apis/security/v1","pkg/security/legacyclient","pkg/security/securitycontextconstraints/util","pkg/template/apis/template","pkg/template/apis/template/install","pkg/template/apis/template/v1","pkg/user/apis/user","pkg/user/apis/user/install","pkg/user/apis/user/v1","pkg/user/apis/user/validation","pkg/user/reaper","pkg/util","pkg/util/dot","pkg/util/errors","pkg/util/namer","pkg/util/parallel","pkg/version"]
-  revision = "v3.6.0"
+  packages = ["pkg/api","pkg/api/apihelpers","pkg/api/graph","pkg/api/graph/graphview","pkg/api/kubegraph","pkg/api/kubegraph/analysis","pkg/api/kubegraph/nodes","pkg/api/latest","pkg/api/legacy","pkg/apps/apis/apps","pkg/apps/apis/apps/install","pkg/apps/apis/apps/v1","pkg/apps/client/internalversion","pkg/apps/cmd","pkg/apps/generated/internalclientset","pkg/apps/generated/internalclientset/scheme","pkg/apps/generated/internalclientset/typed/apps/internalversion","pkg/apps/graph","pkg/apps/graph/analysis","pkg/apps/graph/nodes","pkg/apps/util","pkg/auth/api","pkg/auth/authenticator","pkg/auth/oauth/handlers","pkg/auth/prometheus","pkg/auth/server/csrf","pkg/auth/server/errorpage","pkg/auth/server/headers","pkg/auth/server/login","pkg/auth/server/session","pkg/auth/server/tokenrequest","pkg/auth/userregistry/identitymapper","pkg/authorization/apis/authorization","pkg/authorization/apis/authorization/install","pkg/authorization/apis/authorization/internal/serviceaccount","pkg/authorization/apis/authorization/rbacconversion","pkg/authorization/apis/authorization/v1","pkg/authorization/authorizer","pkg/authorization/authorizer/scope","pkg/authorization/generated/internalclientset","pkg/authorization/generated/internalclientset/scheme","pkg/authorization/generated/internalclientset/typed/authorization/internalversion","pkg/authorization/reaper","pkg/build/apis/build","pkg/build/apis/build/install","pkg/build/apis/build/v1","pkg/build/client/internalversion","pkg/build/cmd","pkg/build/generated/internalclientset","pkg/build/generated/internalclientset/scheme","pkg/build/generated/internalclientset/typed/build/internalversion","pkg/build/generated/listers/build/internalversion","pkg/build/graph","pkg/build/graph/analysis","pkg/build/graph/nodes","pkg/build/util","pkg/cmd/flagtypes","pkg/cmd/util","pkg/cmd/util/clientcmd","pkg/cmd/util/prefixwriter","pkg/cmd/util/term","pkg/cmd/util/tokencmd","pkg/config/cmd","pkg/image/apis/image","pkg/image/apis/image/docker10","pkg/image/apis/image/dockerpre012","pkg/image/apis/image/install","pkg/image/apis/image/internal/digest","pkg/image/apis/image/internal/reference","pkg/image/apis/image/v1","pkg/image/generated/internalclientset","pkg/image/generated/internalclientset/scheme","pkg/image/generated/internalclientset/typed/image/internalversion","pkg/image/graph","pkg/image/graph/nodes","pkg/network/apis/network","pkg/network/apis/network/install","pkg/network/apis/network/v1","pkg/network/generated/internalclientset","pkg/network/generated/internalclientset/scheme","pkg/network/generated/internalclientset/typed/network/internalversion","pkg/oauth/apis/oauth","pkg/oauth/apis/oauth/install","pkg/oauth/apis/oauth/v1","pkg/oauth/apis/oauth/validation","pkg/oauth/generated/internalclientset","pkg/oauth/generated/internalclientset/scheme","pkg/oauth/generated/internalclientset/typed/oauth/internalversion","pkg/oauth/scope","pkg/oauth/server/osinserver","pkg/oauth/util","pkg/oc/cli/cmd/errors","pkg/oc/cli/config","pkg/oc/cli/describe","pkg/oc/errors","pkg/project/apis/project","pkg/project/apis/project/helpers","pkg/project/apis/project/install","pkg/project/apis/project/v1","pkg/project/generated/clientset","pkg/project/generated/clientset/scheme","pkg/project/generated/clientset/typed/project/v1","pkg/project/generated/internalclientset","pkg/project/generated/internalclientset/scheme","pkg/project/generated/internalclientset/typed/project/internalversion","pkg/quota/apis/quota","pkg/quota/apis/quota/install","pkg/quota/apis/quota/v1","pkg/quota/generated/internalclientset","pkg/quota/generated/internalclientset/scheme","pkg/quota/generated/internalclientset/typed/quota/internalversion","pkg/route/apis/route","pkg/route/apis/route/install","pkg/route/apis/route/v1","pkg/route/generated/clientset","pkg/route/generated/clientset/scheme","pkg/route/generated/clientset/typed/route/v1","pkg/route/generated/internalclientset","pkg/route/generated/internalclientset/scheme","pkg/route/generated/internalclientset/typed/route/internalversion","pkg/route/generator","pkg/route/graph","pkg/route/graph/analysis","pkg/route/graph/nodes","pkg/security/apis/security","pkg/security/apis/security/install","pkg/security/apis/security/v1","pkg/security/generated/internalclientset","pkg/security/generated/internalclientset/scheme","pkg/security/generated/internalclientset/typed/security/internalversion","pkg/security/securitycontextconstraints/util","pkg/template/apis/template","pkg/template/apis/template/install","pkg/template/apis/template/v1","pkg/template/generated/internalclientset","pkg/template/generated/internalclientset/scheme","pkg/template/generated/internalclientset/typed/template/internalversion","pkg/user","pkg/user/apis/user","pkg/user/apis/user/install","pkg/user/apis/user/v1","pkg/user/apis/user/validation","pkg/user/generated/internalclientset","pkg/user/generated/internalclientset/scheme","pkg/user/generated/internalclientset/typed/user/internalversion","pkg/user/reaper","pkg/util","pkg/util/dot","pkg/util/errors","pkg/util/httprequest","pkg/util/parallel","pkg/version"]
+  revision = "v3.7.0-rc.0"
 
 [[projects]]
   name = "github.com/openshift/source-to-image"
@@ -395,16 +414,10 @@
   version = "v1.1"
 
 [[projects]]
-  name = "github.com/pelletier/go-buffruneio"
-  packages = ["."]
-  revision = "c37440a7cf42ac63b919c752ca73a85067e05992"
-  version = "v0.2.0"
-
-[[projects]]
   name = "github.com/pelletier/go-toml"
   packages = ["."]
-  revision = "5ccdfb18c776b740aecaf085c4d9a2779199c279"
-  version = "v1.0.0"
+  revision = "16398bac157da96aa88f98a2df640c7f32af1da2"
+  version = "v1.0.1"
 
 [[projects]]
   name = "github.com/prometheus/client_golang"
@@ -422,19 +435,19 @@
   branch = "master"
   name = "github.com/prometheus/common"
   packages = ["expfmt","internal/bitbucket.org/ww/goautoneg","model"]
-  revision = "61f87aac8082fa8c3c5655c7608d7478d46ac2ad"
+  revision = "1bab55dd05dbff384524a6a1c99006d9eb5f139b"
 
 [[projects]]
   branch = "master"
   name = "github.com/prometheus/procfs"
   packages = [".","xfs"]
-  revision = "e645f4e5aaa8506fc71d6edbc5c4ff02c04c46f2"
+  revision = "a6e9df898b1336106c743392c48ee0b71f5c4efa"
 
 [[projects]]
   branch = "master"
   name = "github.com/spf13/afero"
   packages = [".","mem"]
-  revision = "9be650865eab0c12963d8753212f4f9c66cdcf12"
+  revision = "5660eeed305fe5f69c8fc6cf899132a459a97064"
 
 [[projects]]
   name = "github.com/spf13/cast"
@@ -443,16 +456,16 @@
   version = "v1.1.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/spf13/cobra"
   packages = ["."]
-  revision = "cb731b898346822cc0c225c28550a8a29d93c732"
+  revision = "7b2c5ac9fc04fc5efafb60700713d4fa609b777b"
+  version = "v0.0.1"
 
 [[projects]]
   branch = "master"
   name = "github.com/spf13/jwalterweatherman"
   packages = ["."]
-  revision = "0efa5202c04663c757d84f90f5219c1250baf94f"
+  revision = "12bd96e66386c1960ab0f74ced1362f66f552f7b"
 
 [[projects]]
   name = "github.com/spf13/pflag"
@@ -461,64 +474,52 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/spf13/viper"
   packages = ["."]
   revision = "25b30aa063fc18e48662b86996252eabdcf2f0c7"
+  version = "v1.0.0"
 
 [[projects]]
   branch = "master"
   name = "github.com/ugorji/go"
   packages = ["codec"]
-  revision = "5efa3251c7f7d05e5d9704a69a984ec9f1386a40"
+  revision = "d03304bb1d83c196fd3017dca37e89a4504b3676"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/crypto"
   packages = ["acme","ssh/terminal"]
-  revision = "b176d7def5d71bdd214203491f89843ed217f420"
+  revision = "2509b142fb2b797aa7587dad548f113b2c0f20ce"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
-  packages = ["context","context/ctxhttp","html","html/atom","html/charset","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "1c05540f6879653db88113bc4a2b70aec4bd491f"
+  packages = ["context","context/ctxhttp","html","html/atom","html/charset","http2","http2/hpack","idna","lex/httplex"]
+  revision = "c73622c77280266305273cb545f54516ced95b93"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/oauth2"
   packages = [".","google","internal","jws","jwt"]
-  revision = "9a379c6b3e95a790ffc43293c2a78dee0d7b6e20"
+  revision = "bb50c06baba3d0c76f9d125c0719093e315b5b44"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix","windows"]
-  revision = "2d3e384235de683634e9080b58f757466840aa48"
+  revision = "661970f62f5897bc0cd5fdca7e087ba8a98a8fa1"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/text"
-  packages = ["encoding","encoding/charmap","encoding/htmlindex","encoding/internal","encoding/internal/identifier","encoding/japanese","encoding/korean","encoding/simplifiedchinese","encoding/traditionalchinese","encoding/unicode","internal/gen","internal/tag","internal/triegen","internal/ucd","internal/utf8internal","language","runes","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable","width"]
-  revision = "e56139fd9c5bc7244c76116c68e500765bb6db6b"
+  packages = ["collate","collate/build","encoding","encoding/charmap","encoding/htmlindex","encoding/internal","encoding/internal/identifier","encoding/japanese","encoding/korean","encoding/simplifiedchinese","encoding/traditionalchinese","encoding/unicode","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","internal/utf8internal","language","runes","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable","width"]
+  revision = "6eab0e8f74e86c598ec3b6fad4888e0c11482d48"
 
 [[projects]]
   name = "google.golang.org/appengine"
   packages = [".","internal","internal/app_identity","internal/base","internal/datastore","internal/log","internal/modules","internal/remote_api","internal/urlfetch","urlfetch"]
   revision = "150dc57a1b433e64154302bdc40b6bb8aefa313a"
   version = "v1.0.0"
-
-[[projects]]
-  branch = "master"
-  name = "google.golang.org/genproto"
-  packages = ["googleapis/rpc/status"]
-  revision = "6b7d9516179cd47f4714cfeb0103ad1dede756c4"
-
-[[projects]]
-  name = "google.golang.org/grpc"
-  packages = [".","codes","connectivity","credentials","grpclb/grpc_lb_v1","grpclog","internal","keepalive","metadata","naming","peer","stats","status","tap","transport"]
-  revision = "b3ddf786825de56a4178401b7e174ee332173b66"
-  version = "v1.5.2"
 
 [[projects]]
   name = "gopkg.in/inf.v0"
@@ -528,33 +529,45 @@
 
 [[projects]]
   branch = "v2"
+  name = "gopkg.in/mgo.v2"
+  packages = ["bson","internal/json"]
+  revision = "3f83fa5005286a7fe593b055f0d7771a7dce4655"
+
+[[projects]]
+  branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
   revision = "eb3733d160e74a9c7e442f435eb3bea458e1d19f"
 
 [[projects]]
   name = "k8s.io/apimachinery"
-  packages = ["pkg/api/equality","pkg/api/errors","pkg/api/meta","pkg/api/resource","pkg/api/validation","pkg/api/validation/path","pkg/apimachinery","pkg/apimachinery/announced","pkg/apimachinery/registered","pkg/apis/meta/internalversion","pkg/apis/meta/v1","pkg/apis/meta/v1/unstructured","pkg/apis/meta/v1/validation","pkg/conversion","pkg/conversion/queryparams","pkg/fields","pkg/labels","pkg/openapi","pkg/runtime","pkg/runtime/schema","pkg/runtime/serializer","pkg/runtime/serializer/json","pkg/runtime/serializer/protobuf","pkg/runtime/serializer/recognizer","pkg/runtime/serializer/streaming","pkg/runtime/serializer/versioning","pkg/selection","pkg/types","pkg/util/cache","pkg/util/clock","pkg/util/diff","pkg/util/errors","pkg/util/framer","pkg/util/intstr","pkg/util/json","pkg/util/mergepatch","pkg/util/net","pkg/util/rand","pkg/util/runtime","pkg/util/sets","pkg/util/strategicpatch","pkg/util/uuid","pkg/util/validation","pkg/util/validation/field","pkg/util/wait","pkg/util/yaml","pkg/version","pkg/watch","third_party/forked/golang/json","third_party/forked/golang/netutil","third_party/forked/golang/reflect"]
-  revision = "v3.6.0"
+  packages = ["pkg/api/equality","pkg/api/errors","pkg/api/meta","pkg/api/resource","pkg/api/validation","pkg/api/validation/path","pkg/apimachinery","pkg/apimachinery/announced","pkg/apimachinery/registered","pkg/apis/meta/internalversion","pkg/apis/meta/v1","pkg/apis/meta/v1/unstructured","pkg/apis/meta/v1/validation","pkg/apis/meta/v1alpha1","pkg/conversion","pkg/conversion/queryparams","pkg/conversion/unstructured","pkg/fields","pkg/labels","pkg/openapi","pkg/runtime","pkg/runtime/schema","pkg/runtime/serializer","pkg/runtime/serializer/json","pkg/runtime/serializer/protobuf","pkg/runtime/serializer/recognizer","pkg/runtime/serializer/streaming","pkg/runtime/serializer/versioning","pkg/selection","pkg/types","pkg/util/cache","pkg/util/clock","pkg/util/diff","pkg/util/errors","pkg/util/framer","pkg/util/httpstream","pkg/util/httpstream/spdy","pkg/util/intstr","pkg/util/json","pkg/util/mergepatch","pkg/util/net","pkg/util/rand","pkg/util/remotecommand","pkg/util/runtime","pkg/util/sets","pkg/util/strategicpatch","pkg/util/uuid","pkg/util/validation","pkg/util/validation/field","pkg/util/wait","pkg/util/yaml","pkg/version","pkg/watch","third_party/forked/golang/json","third_party/forked/golang/netutil","third_party/forked/golang/reflect"]
+  revision = "v3.7.0-rc.0"
   source = "github.com/tnozicka/openshift-k8s.io-apimachinery"
 
 [[projects]]
   name = "k8s.io/apiserver"
-  packages = ["pkg/authentication/authenticator","pkg/authentication/request/x509","pkg/authentication/serviceaccount","pkg/authentication/user","pkg/endpoints/request","pkg/features","pkg/registry/generic","pkg/registry/rest","pkg/storage","pkg/storage/etcd","pkg/storage/etcd/metrics","pkg/storage/etcd/util","pkg/storage/etcd3","pkg/storage/names","pkg/storage/storagebackend","pkg/storage/storagebackend/factory","pkg/storage/value","pkg/util/cache","pkg/util/feature","pkg/util/flag","pkg/util/trace"]
-  revision = "v3.6.0"
+  packages = ["pkg/apis/audit","pkg/authentication/authenticator","pkg/authentication/request/x509","pkg/authentication/serviceaccount","pkg/authentication/user","pkg/authorization/authorizer","pkg/endpoints/request","pkg/features","pkg/storage/names","pkg/util/feature","pkg/util/flag"]
+  revision = "v3.7.0-rc.0"
   source = "github.com/tnozicka/openshift-k8s.io-apiserver"
 
 [[projects]]
   name = "k8s.io/client-go"
-  packages = ["discovery","discovery/fake","dynamic","kubernetes","kubernetes/scheme","kubernetes/typed/apps/v1beta1","kubernetes/typed/authentication/v1","kubernetes/typed/authentication/v1beta1","kubernetes/typed/authorization/v1","kubernetes/typed/authorization/v1beta1","kubernetes/typed/autoscaling/v1","kubernetes/typed/autoscaling/v2alpha1","kubernetes/typed/batch/v1","kubernetes/typed/batch/v2alpha1","kubernetes/typed/certificates/v1beta1","kubernetes/typed/core/v1","kubernetes/typed/extensions/v1beta1","kubernetes/typed/policy/v1beta1","kubernetes/typed/rbac/v1alpha1","kubernetes/typed/rbac/v1beta1","kubernetes/typed/settings/v1alpha1","kubernetes/typed/storage/v1","kubernetes/typed/storage/v1beta1","pkg/api","pkg/api/install","pkg/api/v1","pkg/apis/apps","pkg/apis/apps/install","pkg/apis/apps/v1beta1","pkg/apis/authentication","pkg/apis/authentication/install","pkg/apis/authentication/v1","pkg/apis/authentication/v1beta1","pkg/apis/authorization","pkg/apis/authorization/install","pkg/apis/authorization/v1","pkg/apis/authorization/v1beta1","pkg/apis/autoscaling","pkg/apis/autoscaling/install","pkg/apis/autoscaling/v1","pkg/apis/autoscaling/v2alpha1","pkg/apis/batch","pkg/apis/batch/install","pkg/apis/batch/v1","pkg/apis/batch/v2alpha1","pkg/apis/certificates","pkg/apis/certificates/install","pkg/apis/certificates/v1beta1","pkg/apis/extensions","pkg/apis/extensions/install","pkg/apis/extensions/v1beta1","pkg/apis/policy","pkg/apis/policy/install","pkg/apis/policy/v1beta1","pkg/apis/rbac","pkg/apis/rbac/install","pkg/apis/rbac/v1alpha1","pkg/apis/rbac/v1beta1","pkg/apis/settings","pkg/apis/settings/install","pkg/apis/settings/v1alpha1","pkg/apis/storage","pkg/apis/storage/install","pkg/apis/storage/v1","pkg/apis/storage/v1beta1","pkg/util","pkg/util/parsers","pkg/version","plugin/pkg/client/auth","plugin/pkg/client/auth/gcp","plugin/pkg/client/auth/oidc","rest","rest/watch","testing","third_party/forked/golang/template","tools/auth","tools/cache","tools/clientcmd","tools/clientcmd/api","tools/clientcmd/api/latest","tools/clientcmd/api/v1","tools/metrics","tools/record","transport","util/cert","util/clock","util/flowcontrol","util/homedir","util/integer","util/jsonpath"]
-  revision = "v3.6.0"
+  packages = ["discovery","dynamic","kubernetes","kubernetes/scheme","kubernetes/typed/admissionregistration/v1alpha1","kubernetes/typed/apps/v1beta1","kubernetes/typed/authentication/v1","kubernetes/typed/authentication/v1beta1","kubernetes/typed/authorization/v1","kubernetes/typed/authorization/v1beta1","kubernetes/typed/autoscaling/v1","kubernetes/typed/autoscaling/v2alpha1","kubernetes/typed/batch/v1","kubernetes/typed/batch/v2alpha1","kubernetes/typed/certificates/v1beta1","kubernetes/typed/core/v1","kubernetes/typed/extensions/v1beta1","kubernetes/typed/networking/v1","kubernetes/typed/policy/v1beta1","kubernetes/typed/rbac/v1alpha1","kubernetes/typed/rbac/v1beta1","kubernetes/typed/settings/v1alpha1","kubernetes/typed/storage/v1","kubernetes/typed/storage/v1beta1","pkg/api","pkg/api/v1","pkg/api/v1/ref","pkg/apis/admissionregistration","pkg/apis/admissionregistration/v1alpha1","pkg/apis/apps","pkg/apis/apps/v1beta1","pkg/apis/authentication","pkg/apis/authentication/v1","pkg/apis/authentication/v1beta1","pkg/apis/authorization","pkg/apis/authorization/v1","pkg/apis/authorization/v1beta1","pkg/apis/autoscaling","pkg/apis/autoscaling/v1","pkg/apis/autoscaling/v2alpha1","pkg/apis/batch","pkg/apis/batch/v1","pkg/apis/batch/v2alpha1","pkg/apis/certificates","pkg/apis/certificates/v1beta1","pkg/apis/extensions","pkg/apis/extensions/v1beta1","pkg/apis/networking","pkg/apis/networking/v1","pkg/apis/policy","pkg/apis/policy/v1beta1","pkg/apis/rbac","pkg/apis/rbac/v1alpha1","pkg/apis/rbac/v1beta1","pkg/apis/settings","pkg/apis/settings/v1alpha1","pkg/apis/storage","pkg/apis/storage/v1","pkg/apis/storage/v1beta1","pkg/util","pkg/util/parsers","pkg/version","plugin/pkg/client/auth","plugin/pkg/client/auth/azure","plugin/pkg/client/auth/gcp","plugin/pkg/client/auth/oidc","rest","rest/watch","third_party/forked/golang/template","tools/auth","tools/cache","tools/clientcmd","tools/clientcmd/api","tools/clientcmd/api/latest","tools/clientcmd/api/v1","tools/metrics","tools/record","tools/remotecommand","transport","util/cert","util/exec","util/flowcontrol","util/homedir","util/integer","util/jsonpath","util/workqueue"]
+  revision = "v3.7.0-rc.0"
   source = "github.com/tnozicka/openshift-k8s.io-client-go"
 
 [[projects]]
   name = "k8s.io/kubernetes"
-  packages = ["federation/apis/federation","federation/apis/federation/install","federation/apis/federation/v1beta1","federation/client/clientset_generated/federation_internalclientset","federation/client/clientset_generated/federation_internalclientset/scheme","federation/client/clientset_generated/federation_internalclientset/typed/autoscaling/internalversion","federation/client/clientset_generated/federation_internalclientset/typed/batch/internalversion","federation/client/clientset_generated/federation_internalclientset/typed/core/internalversion","federation/client/clientset_generated/federation_internalclientset/typed/extensions/internalversion","federation/client/clientset_generated/federation_internalclientset/typed/federation/internalversion","pkg/api","pkg/api/annotations","pkg/api/events","pkg/api/install","pkg/api/pod","pkg/api/service","pkg/api/util","pkg/api/v1","pkg/api/validation","pkg/apis/apps","pkg/apis/apps/install","pkg/apis/apps/v1beta1","pkg/apis/authentication","pkg/apis/authentication/install","pkg/apis/authentication/v1","pkg/apis/authentication/v1beta1","pkg/apis/authorization","pkg/apis/authorization/install","pkg/apis/authorization/v1","pkg/apis/authorization/v1beta1","pkg/apis/autoscaling","pkg/apis/autoscaling/install","pkg/apis/autoscaling/v1","pkg/apis/autoscaling/v2alpha1","pkg/apis/batch","pkg/apis/batch/install","pkg/apis/batch/v1","pkg/apis/batch/v2alpha1","pkg/apis/certificates","pkg/apis/certificates/install","pkg/apis/certificates/v1beta1","pkg/apis/componentconfig","pkg/apis/componentconfig/install","pkg/apis/componentconfig/v1alpha1","pkg/apis/extensions","pkg/apis/extensions/install","pkg/apis/extensions/v1beta1","pkg/apis/policy","pkg/apis/policy/install","pkg/apis/policy/v1beta1","pkg/apis/rbac","pkg/apis/rbac/install","pkg/apis/rbac/v1alpha1","pkg/apis/rbac/v1beta1","pkg/apis/settings","pkg/apis/settings/install","pkg/apis/settings/v1alpha1","pkg/apis/storage","pkg/apis/storage/install","pkg/apis/storage/util","pkg/apis/storage/v1","pkg/apis/storage/v1beta1","pkg/capabilities","pkg/client/clientset_generated/clientset","pkg/client/clientset_generated/clientset/scheme","pkg/client/clientset_generated/clientset/typed/apps/v1beta1","pkg/client/clientset_generated/clientset/typed/authentication/v1","pkg/client/clientset_generated/clientset/typed/authentication/v1beta1","pkg/client/clientset_generated/clientset/typed/authorization/v1","pkg/client/clientset_generated/clientset/typed/authorization/v1beta1","pkg/client/clientset_generated/clientset/typed/autoscaling/v1","pkg/client/clientset_generated/clientset/typed/autoscaling/v2alpha1","pkg/client/clientset_generated/clientset/typed/batch/v1","pkg/client/clientset_generated/clientset/typed/batch/v2alpha1","pkg/client/clientset_generated/clientset/typed/certificates/v1beta1","pkg/client/clientset_generated/clientset/typed/core/v1","pkg/client/clientset_generated/clientset/typed/extensions/v1beta1","pkg/client/clientset_generated/clientset/typed/policy/v1beta1","pkg/client/clientset_generated/clientset/typed/rbac/v1alpha1","pkg/client/clientset_generated/clientset/typed/rbac/v1beta1","pkg/client/clientset_generated/clientset/typed/settings/v1alpha1","pkg/client/clientset_generated/clientset/typed/storage/v1","pkg/client/clientset_generated/clientset/typed/storage/v1beta1","pkg/client/clientset_generated/internalclientset","pkg/client/clientset_generated/internalclientset/fake","pkg/client/clientset_generated/internalclientset/scheme","pkg/client/clientset_generated/internalclientset/typed/apps/internalversion","pkg/client/clientset_generated/internalclientset/typed/apps/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/authentication/internalversion","pkg/client/clientset_generated/internalclientset/typed/authentication/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/authorization/internalversion","pkg/client/clientset_generated/internalclientset/typed/authorization/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/autoscaling/internalversion","pkg/client/clientset_generated/internalclientset/typed/autoscaling/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/batch/internalversion","pkg/client/clientset_generated/internalclientset/typed/batch/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/certificates/internalversion","pkg/client/clientset_generated/internalclientset/typed/certificates/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/core/internalversion","pkg/client/clientset_generated/internalclientset/typed/core/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/extensions/internalversion","pkg/client/clientset_generated/internalclientset/typed/extensions/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/policy/internalversion","pkg/client/clientset_generated/internalclientset/typed/policy/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/rbac/internalversion","pkg/client/clientset_generated/internalclientset/typed/rbac/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/settings/internalversion","pkg/client/clientset_generated/internalclientset/typed/settings/internalversion/fake","pkg/client/clientset_generated/internalclientset/typed/storage/internalversion","pkg/client/clientset_generated/internalclientset/typed/storage/internalversion/fake","pkg/client/listers/core/v1","pkg/client/listers/extensions/v1beta1","pkg/client/retry","pkg/client/unversioned","pkg/controller","pkg/controller/deployment/util","pkg/credentialprovider","pkg/features","pkg/fieldpath","pkg/kubectl","pkg/kubectl/cmd/util","pkg/kubectl/resource","pkg/kubelet/client","pkg/kubelet/qos","pkg/kubelet/types","pkg/master/ports","pkg/printers","pkg/printers/internalversion","pkg/registry/core/namespace","pkg/security/apparmor","pkg/serviceaccount","pkg/util","pkg/util/exec","pkg/util/hash","pkg/util/interrupt","pkg/util/labels","pkg/util/net/sets","pkg/util/node","pkg/util/parsers","pkg/util/slice","pkg/util/term","pkg/version","plugin/pkg/auth/authorizer/rbac/bootstrappolicy"]
-  revision = "v3.6.0"
+  packages = ["cmd/kubeadm/app/apis/kubeadm","federation/apis/federation","federation/apis/federation/install","federation/apis/federation/v1beta1","federation/client/clientset_generated/federation_internalclientset","federation/client/clientset_generated/federation_internalclientset/scheme","federation/client/clientset_generated/federation_internalclientset/typed/autoscaling/internalversion","federation/client/clientset_generated/federation_internalclientset/typed/batch/internalversion","federation/client/clientset_generated/federation_internalclientset/typed/core/internalversion","federation/client/clientset_generated/federation_internalclientset/typed/extensions/internalversion","federation/client/clientset_generated/federation_internalclientset/typed/federation/internalversion","pkg/api","pkg/api/events","pkg/api/helper","pkg/api/helper/qos","pkg/api/install","pkg/api/pod","pkg/api/ref","pkg/api/resource","pkg/api/service","pkg/api/util","pkg/api/v1","pkg/api/v1/helper","pkg/api/v1/helper/qos","pkg/api/v1/pod","pkg/api/v1/ref","pkg/api/validation","pkg/apis/admissionregistration","pkg/apis/admissionregistration/install","pkg/apis/admissionregistration/v1alpha1","pkg/apis/apps","pkg/apis/apps/install","pkg/apis/apps/v1beta1","pkg/apis/authentication","pkg/apis/authentication/install","pkg/apis/authentication/v1","pkg/apis/authentication/v1beta1","pkg/apis/authorization","pkg/apis/authorization/install","pkg/apis/authorization/v1","pkg/apis/authorization/v1beta1","pkg/apis/autoscaling","pkg/apis/autoscaling/install","pkg/apis/autoscaling/v1","pkg/apis/autoscaling/v2alpha1","pkg/apis/batch","pkg/apis/batch/install","pkg/apis/batch/v1","pkg/apis/batch/v2alpha1","pkg/apis/certificates","pkg/apis/certificates/install","pkg/apis/certificates/v1beta1","pkg/apis/componentconfig","pkg/apis/componentconfig/install","pkg/apis/componentconfig/v1alpha1","pkg/apis/extensions","pkg/apis/extensions/install","pkg/apis/extensions/v1beta1","pkg/apis/networking","pkg/apis/networking/install","pkg/apis/networking/v1","pkg/apis/policy","pkg/apis/policy/install","pkg/apis/policy/v1beta1","pkg/apis/rbac","pkg/apis/rbac/install","pkg/apis/rbac/v1alpha1","pkg/apis/rbac/v1beta1","pkg/apis/settings","pkg/apis/settings/install","pkg/apis/settings/v1alpha1","pkg/apis/storage","pkg/apis/storage/install","pkg/apis/storage/util","pkg/apis/storage/v1","pkg/apis/storage/v1beta1","pkg/capabilities","pkg/client/clientset_generated/clientset","pkg/client/clientset_generated/clientset/scheme","pkg/client/clientset_generated/clientset/typed/admissionregistration/v1alpha1","pkg/client/clientset_generated/clientset/typed/apps/v1beta1","pkg/client/clientset_generated/clientset/typed/authentication/v1","pkg/client/clientset_generated/clientset/typed/authentication/v1beta1","pkg/client/clientset_generated/clientset/typed/authorization/v1","pkg/client/clientset_generated/clientset/typed/authorization/v1beta1","pkg/client/clientset_generated/clientset/typed/autoscaling/v1","pkg/client/clientset_generated/clientset/typed/autoscaling/v2alpha1","pkg/client/clientset_generated/clientset/typed/batch/v1","pkg/client/clientset_generated/clientset/typed/batch/v2alpha1","pkg/client/clientset_generated/clientset/typed/certificates/v1beta1","pkg/client/clientset_generated/clientset/typed/core/v1","pkg/client/clientset_generated/clientset/typed/extensions/v1beta1","pkg/client/clientset_generated/clientset/typed/networking/v1","pkg/client/clientset_generated/clientset/typed/policy/v1beta1","pkg/client/clientset_generated/clientset/typed/rbac/v1alpha1","pkg/client/clientset_generated/clientset/typed/rbac/v1beta1","pkg/client/clientset_generated/clientset/typed/settings/v1alpha1","pkg/client/clientset_generated/clientset/typed/storage/v1","pkg/client/clientset_generated/clientset/typed/storage/v1beta1","pkg/client/clientset_generated/internalclientset","pkg/client/clientset_generated/internalclientset/scheme","pkg/client/clientset_generated/internalclientset/typed/admissionregistration/internalversion","pkg/client/clientset_generated/internalclientset/typed/apps/internalversion","pkg/client/clientset_generated/internalclientset/typed/authentication/internalversion","pkg/client/clientset_generated/internalclientset/typed/authorization/internalversion","pkg/client/clientset_generated/internalclientset/typed/autoscaling/internalversion","pkg/client/clientset_generated/internalclientset/typed/batch/internalversion","pkg/client/clientset_generated/internalclientset/typed/certificates/internalversion","pkg/client/clientset_generated/internalclientset/typed/core/internalversion","pkg/client/clientset_generated/internalclientset/typed/extensions/internalversion","pkg/client/clientset_generated/internalclientset/typed/networking/internalversion","pkg/client/clientset_generated/internalclientset/typed/policy/internalversion","pkg/client/clientset_generated/internalclientset/typed/rbac/internalversion","pkg/client/clientset_generated/internalclientset/typed/settings/internalversion","pkg/client/clientset_generated/internalclientset/typed/storage/internalversion","pkg/client/informers/informers_generated/externalversions/apps/v1beta1","pkg/client/informers/informers_generated/externalversions/core/v1","pkg/client/informers/informers_generated/externalversions/extensions/v1beta1","pkg/client/informers/informers_generated/externalversions/internalinterfaces","pkg/client/leaderelection/resourcelock","pkg/client/listers/apps/v1beta1","pkg/client/listers/core/v1","pkg/client/listers/extensions/v1beta1","pkg/client/listers/rbac/internalversion","pkg/client/retry","pkg/client/unversioned","pkg/controller","pkg/controller/daemon","pkg/controller/daemon/util","pkg/controller/deployment/util","pkg/credentialprovider","pkg/features","pkg/fieldpath","pkg/kubectl","pkg/kubectl/cmd/util","pkg/kubectl/cmd/util/openapi","pkg/kubectl/plugins","pkg/kubectl/resource","pkg/kubectl/util","pkg/kubelet/apis","pkg/kubelet/qos","pkg/kubelet/types","pkg/master/ports","pkg/printers","pkg/printers/internalversion","pkg/registry/rbac/validation","pkg/security/apparmor","pkg/serviceaccount","pkg/util","pkg/util/exec","pkg/util/hash","pkg/util/interrupt","pkg/util/labels","pkg/util/metrics","pkg/util/mount","pkg/util/net/sets","pkg/util/node","pkg/util/parsers","pkg/util/slice","pkg/util/term","pkg/version","pkg/volume/util","plugin/pkg/auth/authorizer/rbac","plugin/pkg/scheduler/algorithm","plugin/pkg/scheduler/algorithm/predicates","plugin/pkg/scheduler/algorithm/priorities/util","plugin/pkg/scheduler/api","plugin/pkg/scheduler/schedulercache","plugin/pkg/scheduler/util"]
+  revision = "v3.7.0-rc.0"
   source = "github.com/tnozicka/openshift-k8s.io-kubernetes"
+
+[[projects]]
+  name = "k8s.io/metrics"
+  packages = ["pkg/apis/metrics","pkg/apis/metrics/v1alpha1","pkg/client/clientset_generated/clientset","pkg/client/clientset_generated/clientset/scheme","pkg/client/clientset_generated/clientset/typed/metrics/v1alpha1"]
+  revision = "v3.7.0-rc.0"
+  source = "github.com/tnozicka/openshift-k8s.io-metrics"
 
 [[projects]]
   branch = "master"
@@ -565,6 +578,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b8aba39e52782bb0fb339a8ba796e07123b1be267abededd0852e4205fe787c6"
+  inputs-digest = "4aaffb30a38697e37f54e1d1f85401a2c940b7904edb941ec5ed71824104fe87"
   solver-name = "gps-cdcl"
   solver-version = 1

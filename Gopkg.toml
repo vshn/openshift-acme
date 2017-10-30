@@ -16,47 +16,52 @@
 
 [[constraint]]
   name = "github.com/openshift/origin"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
 
 [[constraint]]
   name = "k8s.io/kubernetes"
   source = "github.com/tnozicka/openshift-k8s.io-kubernetes"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
 
 [[constraint]]
   name = "k8s.io/client-go"
   source = "github.com/tnozicka/openshift-k8s.io-client-go"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
 
 [[constraint]]
   name = "k8s.io/apimachinery"
   source = "github.com/tnozicka/openshift-k8s.io-apimachinery"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
 
 [[override]]
   name = "k8s.io/apiserver"
   source = "github.com/tnozicka/openshift-k8s.io-apiserver"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
 
 [[override]]
   name = "k8s.io/kube-aggregator"
   source = "github.com/tnozicka/openshift-k8s.io-kube-aggregator"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
+
+[[override]]
+  name = "k8s.io/metrics"
+  source = "github.com/tnozicka/openshift-k8s.io-metrics"
+  revision = "v3.7.0-rc.0"
 
 [[override]]
   name = "github.com/coreos/etcd"
   source = "github.com/tnozicka/openshift-github.com-coreos-etcd"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
 
 [[override]]
   name = "github.com/docker/engine-api"
   source = "github.com/tnozicka/openshift-github.com-docker-engine-api"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
 
 [[override]]
   name = "github.com/docker/distribution"
   source = "github.com/tnozicka/openshift-github.com-docker-distribution"
-  revision = "v3.6.0"
+  revision = "v3.7.0-rc.0"
 
 [[override]]
   name = "golang.org/x/exp"

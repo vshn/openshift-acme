@@ -15,10 +15,9 @@ import (
 	"k8s.io/client-go/rest"
 	kclientcmd "k8s.io/client-go/tools/clientcmd"
 
-	"github.com/openshift/origin/pkg/client"
-	"github.com/openshift/origin/pkg/cmd/cli/config"
 	oclientcmd "github.com/openshift/origin/pkg/cmd/util/clientcmd"
 	"github.com/openshift/origin/pkg/cmd/util/tokencmd"
+	"github.com/openshift/origin/pkg/oc/cli/config"
 	projectclientset "github.com/openshift/origin/pkg/project/generated/clientset"
 	routeclientset "github.com/openshift/origin/pkg/route/generated/clientset"
 )
@@ -183,13 +182,13 @@ func (f *Framework) AfterEach() {
 	}
 }
 
-// Deprecated: We can get rid of it with OpenShift 3.7, but 3.6 is missing ProjectRequests in new API
-func (f *Framework) LegacyClient() client.Interface {
-	client, err := client.New(f.ClientConfig())
-	o.Expect(err).NotTo(o.HaveOccurred(), "Failed to create legacy client")
-
-	return client
-}
+//// Deprecated: We can get rid of it with OpenShift 3.7, but 3.6 is missing ProjectRequests in new API
+//func (f *Framework) LegacyClient() client.Interface {
+//	client, err := client.New(f.ClientConfig())
+//	o.Expect(err).NotTo(o.HaveOccurred(), "Failed to create legacy client")
+//
+//	return client
+//}
 
 func (f *Framework) RouteClientset() routeclientset.Interface {
 	clientset, err := routeclientset.NewForConfig(f.ClientConfig())
