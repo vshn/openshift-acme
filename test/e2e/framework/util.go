@@ -17,7 +17,7 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/client/retry"
 
-	projectapi "github.com/openshift/origin/pkg/project/apis/project"
+	projectapiv1 "github.com/openshift/origin/pkg/project/apis/project/v1"
 )
 
 func CreateTestingNamespace(f *Framework, name string, labels map[string]string) (*v1.Namespace, error) {
@@ -63,7 +63,8 @@ func CreateTestingNamespace(f *Framework, name string, labels map[string]string)
 
 func CreateProject(f *Framework, name string, labels map[string]string) (*v1.Namespace, error) {
 	Logf("************** %#v", labels)
-	_, err := f.LegacyClient().ProjectRequests().Create(&projectapi.ProjectRequest{
+	//_, err := f.LegacyClient().ProjectRequests().Create(&projectapi.ProjectRequest{
+	_, err := f.ProjectClientset().ProjectV1().ProjectRequests().Create(&projectapiv1.ProjectRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
 			Labels: labels,

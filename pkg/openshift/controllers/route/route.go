@@ -1,262 +1,199 @@
 package route
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
+	"flag"
 	"fmt"
-	"sync"
 	"time"
 
-	"github.com/go-playground/log"
-	"github.com/tnozicka/openshift-acme/pkg/acme"
-	oapi "github.com/tnozicka/openshift-acme/pkg/openshift/api"
-	acme_controller "github.com/tnozicka/openshift-acme/pkg/openshift/controllers/acme"
-	"github.com/tnozicka/openshift-acme/pkg/openshift/untypedclient"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
-	corev1 "k8s.io/client-go/pkg/api/v1"
+	"github.com/golang/glog"
+
+	"k8s.io/client-go/pkg/api/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/workqueue"
 )
 
-type ServiceID struct {
-	Name      string
-	Namespace string
-}
 
 type RouteController struct {
-	client      corev1client.CoreV1Interface
-	ctx         context.Context
-	acme        *acme_controller.AcmeController
-	exposers    map[string]acme.ChallengeExposer
-	wg          sync.WaitGroup
-	selfService ServiceID
-	// TODO: update IP and port in a goroutine if someone were to change them; protect by RW mutex
-	selfServiceEndpointSubsets []corev1.EndpointSubset
-	watchNamespaces            []string
-	resourceVersions           map[string]string // namespace => resourceVersion
+	indexer  cache.Indexer
+	queue    workqueue.RateLimitingInterface
+	informer cache.Controller
 }
 
-func NewRouteController(ctx context.Context, client corev1client.CoreV1Interface, acme *acme_controller.AcmeController,
-	exposers map[string]acme.ChallengeExposer, selfService ServiceID, watchNamespaces []string) (rc RouteController, err error) {
-	rc.client = client
-	rc.acme = acme
-	rc.exposers = exposers
-	rc.ctx = ctx
-	rc.selfService = selfService
-	err = rc.UpdateSelfServiceEndpointSubsets()
+func NewRouteController(indexer cache.Indexer, informer cache.Controller) *RouteController {
+	return &RouteController{
+		informer: informer,
+		indexer:  indexer,
+		queue:    workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+	}
+}
+
+func (c *RouteController) processNextItem() bool {
+	// Wait until there is a new item in the working queue
+	key, quit := c.queue.Get()
+	if quit {
+		return false
+	}
+	// Tell the queue that we are done with processing this key. This unblocks the key for other workers
+	// This allows safe parallel processing because two Routes with the same key are never processed in
+	// parallel.
+	defer c.queue.Done(key)
+
+	// Invoke the method containing the business logic
+	err := c.handle(key.(string))
+	// Handle the error if something went wrong during the execution of the business logic
+	c.handleErr(err, key)
+	return true
+}
+
+// handle is the business logic of the controller.
+// In case an error happened, it has to simply return the error.
+// The retry logic should not be part of the business logic.
+func (c *RouteController) handle(key string) error {
+	obj, exists, err := c.indexer.GetByKey(key)
 	if err != nil {
-		return
-	}
-	rc.watchNamespaces = watchNamespaces
-
-	rc.resourceVersions = make(map[string]string)
-	// we have to initialize the array here to make subsequent access race free
-	for _, namespace := range watchNamespaces {
-		rc.resourceVersions[namespace] = "0"
+		glog.Errorf("Fetching object with key %s from store failed with %v", key, err)
+		return err
 	}
 
-	return
-}
-
-func (rc *RouteController) doWatchIteration(namespace string) error {
-	var url string
-	if namespace == "" {
-		url = "/oapi/v1/watch/routes"
+	if !exists {
+		// Below we will warm up our cache with a Route, so that we will see a delete for one Route
+		fmt.Printf("Route %s does not exist anymore\n", key)
 	} else {
-		url = fmt.Sprintf("/oapi/v1/watch/namespaces/%s/routes", namespace)
+		// Note that you also have to check the uid if you have a local controlled resource, which
+		// is dependent on the actual instance, to detect that a Pod was recreated with the same name
+		fmt.Printf("Sync/Add/Update for Route %s\n", obj.(*v1.Pod).GetName())
 	}
-	w, err := untypedclient.Watch(rc.client.RESTClient(), url+"?resourceVersion="+rc.resourceVersions[namespace])
-	if err != nil {
-		return fmt.Errorf("watch failed: %s", err)
-	}
-	defer w.Stop()
-
-	for {
-		select {
-		case <-rc.ctx.Done():
-			return nil
-		case rawEvent, ok := <-w.ResultChan():
-			if !ok {
-				return errors.New("RouteController ResultChannel closed")
-			}
-
-			var event oapi.Event
-			if err := json.Unmarshal(rawEvent, &event); err != nil {
-				log.Error(err)
-				return fmt.Errorf("watch failed to unmarshal event: %s", err)
-			}
-
-			switch event.Type {
-			case "ERROR":
-				var status metav1.Status
-				if err := json.Unmarshal(event.Object, &status); err != nil {
-					log.Error(err)
-					return fmt.Errorf("RouteController: failed to unmarshal Status: '%s'", err)
-				}
-
-				if status.Code == 410 {
-					log.Warnf("RouteController: resetting resourceVersion: caused by 'ERROR' (%#v)", status)
-					rc.resourceVersions[namespace] = "0"
-					// FIXME: clean db because some objects could escape getting deleted this way
-					continue
-				}
-
-				err := fmt.Errorf("RouteController: unknown 'ERROR' (%s)", event.Object)
-				log.Error(err)
-				return err
-			default:
-				return fmt.Errorf("Unknown Route event '%s'", event.Type)
-			case "ADDED", "MODIFIED", "DELETED":
-				break
-			}
-
-			var route oapi.Route
-			if err := json.Unmarshal(event.Object, &route); err != nil {
-				log.Error(err)
-				return fmt.Errorf("RouteController: failed to unmarshal Route: '%s'", err)
-			}
-
-			if route.Annotations["kubernetes.io/tls-acme"] != "true" {
-				rc.resourceVersions[namespace] = route.ResourceVersion
-				continue
-			}
-
-			log.Debugf("Type: %s", event.Type)
-			// We need to check first if the route has been admitted by the router.
-			// The assumption is that we wait for all ingresses
-			admittedSet := false
-			admittedValue := true
-			for _, ingress := range route.Status.Ingress {
-				for _, condition := range ingress.Conditions {
-					if condition.Type == "Admitted" {
-						admittedSet = true
-						if condition.Status != "True" {
-							admittedValue = false
-						}
-					}
-				}
-			}
-			if !(admittedSet && admittedValue) {
-				log.Debugf("RouteController: skipping route (not admitted) [admittedSet=%t, admittedValue=%t]", admittedSet, admittedValue)
-				rc.resourceVersions[namespace] = route.ResourceVersion
-				continue
-			}
-
-			switch event.Type {
-			case "ADDED", "MODIFIED":
-				log.Debugf("RouteController: processing route '%s'", route.Spec.Host)
-				err = rc.acme.Manage(&RouteObject{
-					route:                      route,
-					client:                     rc.client,
-					exposers:                   rc.exposers,
-					SelfServiceEndpointSubsets: rc.selfServiceEndpointSubsets,
-				})
-				if err != nil {
-					return fmt.Errorf("acme.Manage failed: %s", err)
-				}
-			case "DELETED":
-				err = rc.acme.Done(&RouteObject{
-					route:                      route,
-					client:                     rc.client,
-					exposers:                   rc.exposers,
-					SelfServiceEndpointSubsets: rc.selfServiceEndpointSubsets,
-				})
-				if err != nil {
-					return fmt.Errorf("acme.Done failed: %s", err)
-				}
-			default:
-				return fmt.Errorf("Unknown Route event '%s'", event.Type)
-			}
-
-			rc.resourceVersions[namespace] = route.ResourceVersion
-		}
-	}
-}
-
-func (rc *RouteController) watch(namespace string) {
-	defer rc.wg.Done()
-	log.Infof("RouteController: watching namespace '%s'", namespace)
-
-	for {
-		select {
-		case <-rc.ctx.Done():
-			return
-		default:
-		}
-
-		err := rc.doWatchIteration(namespace)
-		if err == nil {
-			break // cancelling due to ctx.Done() from doWatchIteration
-		}
-
-		log.Errorf("RouteController: doWatchIteration failed: %s", err)
-		// TODO: raise error counter for health check
-
-		// TODO: exponential backoff
-		select {
-		case <-rc.ctx.Done():
-			return
-		case <-time.After(10 * time.Second):
-		}
-	}
-}
-
-func (rc *RouteController) Start() {
-	rc.Wait() // make sure it can't be started twice at the same time
-
-	for _, namespace := range rc.watchNamespaces {
-		rc.wg.Add(1)
-		go rc.watch(namespace)
-	}
-
-	go func() {
-		rc.wg.Wait()
-		log.Info("RouteController finished")
-	}()
-}
-
-func (rc *RouteController) Wait() {
-	rc.wg.Wait()
-}
-
-func (rc *RouteController) UpdateSelfServiceEndpointSubsets() (err error) {
-	service, err := rc.client.Services(rc.selfService.Namespace).Get(rc.selfService.Name, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("RouteController could not find its own service: '%s'", err)
-	}
-
-	switch service.Spec.ClusterIP {
-	case "":
-		return errors.New("unable to detect selfServiceIP: clusterIP=''")
-	case "None":
-		// this is a headless service; go for endpoints directly
-		// usually a case for development setups
-		endpoints, err := rc.client.Endpoints(rc.selfService.Namespace).Get(rc.selfService.Name, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("RouteController could not find corresponding endpoints to its own service: '%s'", err)
-		}
-		// TODO: check if there are any subsets and make sure there are valid
-		rc.selfServiceEndpointSubsets = endpoints.Subsets
-	default:
-		// for regular service we will use static and load-balanced ClusterIP
-		ports := []corev1.EndpointPort{}
-		for _, svc_port := range service.Spec.Ports {
-			ports = append(ports, corev1.EndpointPort{Port: svc_port.Port})
-		}
-
-		rc.selfServiceEndpointSubsets = []corev1.EndpointSubset{
-			{
-				Addresses: []corev1.EndpointAddress{
-					{
-						IP: service.Spec.ClusterIP,
-					},
-				},
-				Ports: ports,
-			},
-		}
-	}
-
-	log.Debugf("Detected subsets for selfService: '%+v'", rc.selfServiceEndpointSubsets)
-
 	return nil
 }
+
+// handleErr checks if an error happened and makes sure we will retry later.
+func (c *RouteController) handleErr(err error, key interface{}) {
+	if err == nil {
+		// Forget about the #AddRateLimited history of the key on every successful synchronization.
+		// This ensures that future processing of updates for this key is not delayed because of
+		// an outdated error history.
+		c.queue.Forget(key)
+		return
+	}
+
+	// This controller retries 5 times if something goes wrong. After that, it stops trying.
+	if c.queue.NumRequeues(key) < 5 {
+		glog.Infof("Error syncing Route %v: %v", key, err)
+
+		// Re-enqueue the key rate limited. Based on the rate limiter on the
+		// queue and the re-enqueue history, the key will be processed later again.
+		c.queue.AddRateLimited(key)
+		return
+	}
+
+	c.queue.Forget(key)
+	// Report to an external entity that, even after several retries, we could not successfully process this key
+	runtime.HandleError(err)
+	glog.Infof("Dropping Route %q out of the queue: %v", key, err)
+}
+
+func (c *RouteController) Run(threadiness int, stopCh chan struct{}) {
+	defer runtime.HandleCrash()
+
+	// Let the workers stop when we are done
+	defer c.queue.ShutDown()
+	glog.Info("Starting Route controller")
+
+	go c.informer.Run(stopCh)
+
+	// Wait for all involved caches to be synced, before processing items from the queue is started
+	if !cache.WaitForCacheSync(stopCh, c.informer.HasSynced) {
+		runtime.HandleError(fmt.Errorf("Timed out waiting for caches to sync"))
+		return
+	}
+
+	for i := 0; i < threadiness; i++ {
+		go wait.Until(c.runWorker, time.Second, stopCh)
+	}
+
+	<-stopCh
+	glog.Info("Stopping Route controller")
+}
+
+func (c *RouteController) runWorker() {
+	for c.processNextItem() {
+	}
+}
+
+func main() {
+
+	flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	flag.StringVar(&master, "master", "", "master url")
+	flag.Parse()
+
+	// creates the connection
+	config, err := clientcmd.BuildConfigFromFlags(master, kubeconfig)
+	if err != nil {
+		glog.Fatal(err)
+	}
+
+	// creates the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		glog.Fatal(err)
+	}
+
+	// create the pod watcher
+	podListWatcher := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "pods", v1.NamespaceDefault, fields.Everything())
+
+	// create the workqueue
+	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
+
+	// Bind the workqueue to a cache with the help of an informer. This way we make sure that
+	// whenever the cache is updated, the pod key is added to the workqueue.
+	// Note that when we finally process the item from the workqueue, we might see a newer version
+	// of the Route than the version which was responsible for triggering the update.
+	indexer, informer := cache.NewIndexerInformer(podListWatcher, &v1.Pod{}, 0, cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			key, err := cache.MetaNamespaceKeyFunc(obj)
+			if err == nil {
+				queue.Add(key)
+			}
+		},
+		UpdateFunc: func(old interface{}, new interface{}) {
+			key, err := cache.MetaNamespaceKeyFunc(new)
+			if err == nil {
+				queue.Add(key)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			// IndexerInformer uses a delta queue, therefore for deletes we have to use this
+			// key function.
+			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+			if err == nil {
+				queue.Add(key)
+			}
+		},
+	}, cache.Indexers{})
+
+	controller := NewRouteController(queue, indexer, informer)
+
+	// We can now warm up the cache for initial synchronization.
+	// Let's suppose that we knew about a pod "mypod" on our last run, therefore add it to the cache.
+	// If this pod is not there anymore, the controller will be notified about the removal after the
+	// cache has synchronized.
+	indexer.Add(&v1.Pod{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name:      "mypod",
+			Namespace: v1.NamespaceDefault,
+		},
+	})
+
+	// Now let's start the controller
+	stop := make(chan struct{})
+	defer close(stop)
+	go controller.Run(1, stop)
+
+	// Wait forever
+	select {}

@@ -1,48 +1,40 @@
 package cmd
 
 import (
-	"context"
+	//"context"
 	"errors"
 	"io"
-	"io/ioutil"
+	//"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
-	"github.com/go-playground/log"
-	"github.com/go-playground/log/handlers/console"
+	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tnozicka/openshift-acme/pkg/acme"
-	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
+	//"github.com/tnozicka/openshift-acme/pkg/acme"
+	//"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
 	cmdutil "github.com/tnozicka/openshift-acme/pkg/cmd/util"
-	acme_controller "github.com/tnozicka/openshift-acme/pkg/openshift/controllers/acme"
-	route_controller "github.com/tnozicka/openshift-acme/pkg/openshift/controllers/route"
+	routecontroller "github.com/tnozicka/openshift-acme/pkg/openshift/controllers/route"
 	"k8s.io/client-go/kubernetes"
+	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	//kcoreinformersv1 "k8s.io/client-go/informers/core/v1"
+	"time"
+
+	kinformers "k8s.io/client-go/informers"
 )
 
 const (
 	Flag_LogLevel_Key             = "loglevel"
 	Flag_Kubeconfig_Key           = "kubeconfig"
-	Flag_Masterurl_Key            = "masterurl"
 	Flag_Listen_Key               = "listen"
 	Flag_Acmeurl_Key              = "acmeurl"
 	Flag_Selfservicename_Key      = "selfservicename"
 	Flag_Selfservicenamespace_Key = "selfservicenamespace"
 	Flag_Watchnamespace_Key       = "watch-namespace"
 )
-
-func loglevelToLevels(level int) []log.Level {
-	if level >= len(log.AllLevels) {
-		level = len(log.AllLevels)
-	}
-
-	r := []log.Level{}
-	r = append(r, log.AllLevels[len(log.AllLevels)-level:]...)
-	return r
-}
 
 func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 	v := viper.New()
@@ -67,7 +59,6 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 			// We have to bind Viper in Run because there is only one instance to avoid collisions
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_LogLevel_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Kubeconfig_Key)
-			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Masterurl_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Listen_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Acmeurl_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Selfservicename_Key)
@@ -75,9 +66,10 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Watchnamespace_Key)
 
 			// Setup logger
-			loglevel := v.GetInt(Flag_LogLevel_Key)
-			cLog := console.New()
-			log.RegisterHandler(cLog, loglevelToLevels(loglevel)...)
+			//err := glog.V() Level.Set(v.GetString(Flag_LogLevel_Key))
+			//if err != nil {
+			//	return nil
+			//}
 
 			return nil
 		},
@@ -87,7 +79,6 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 
 	rootCmd.PersistentFlags().Int8P(Flag_LogLevel_Key, "", 8, "Set loglevel")
 	rootCmd.PersistentFlags().StringP(Flag_Kubeconfig_Key, "", "", "Absolute path to the kubeconfig file")
-	rootCmd.PersistentFlags().StringP(Flag_Masterurl_Key, "", "", "Kubernetes master URL")
 	rootCmd.PersistentFlags().StringP(Flag_Listen_Key, "", "0.0.0.0:5000", "Listen address for http-01 server")
 	rootCmd.PersistentFlags().StringP(Flag_Acmeurl_Key, "", "https://acme-staging.api.letsencrypt.org/directory", "ACME URL like https://acme-v01.api.letsencrypt.org/directory")
 	rootCmd.PersistentFlags().StringP(Flag_Selfservicename_Key, "", "acme-controller", "Name of the service pointing to a pod with this program.")
@@ -97,97 +88,88 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 	return rootCmd
 }
 
-func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
-	defer log.Trace("Controller finished").End()
-	log.Info("Starting controller")
+func getClientConfig(kubeConfigPath string) *restclient.Config {
+	if kubeConfigPath == "" {
+		config, err := restclient.InClusterConfig()
+		if err != nil {
+			glog.Fatalf("Failed to create InClusterConfig: %v", err)
+		}
+		return config
+	}
 
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath}, nil).ClientConfig()
+	if err != nil {
+		glog.Fatalf("Failed to create config from kubeConfigPath (%s): %v", kubeConfigPath, err)
+	}
+	return config
+}
+
+func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	// Setup signal handling
 	signalChannel := make(chan os.Signal, 10)
 	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGABRT, syscall.SIGTERM)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	//ctx, cancel := context.WithCancel(context.Background())
+	//defer cancel()
 
 	acmeUrl := v.GetString(Flag_Acmeurl_Key)
-	log.Infof("ACME server url is '%s'", acmeUrl)
+	glog.Infof("ACME server url is '%s'", acmeUrl)
 
-	kubeConfigPath := v.GetString(Flag_Kubeconfig_Key)
-	masterUrl := v.GetString(Flag_Masterurl_Key)
-	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags(masterUrl, kubeConfigPath)
+	config := getClientConfig(v.GetString(Flag_Kubeconfig_Key))
+
+	kubeClientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatal(err)
-	}
-	// create the clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatal(err)
+		glog.Fatalf("Error building kubernetes clientset: %s", err.Error())
 	}
 
-	watchNamespaces := v.GetStringSlice(Flag_Watchnamespace_Key)
-	// spf13/cobra (sadly) treats []string{""} as []string{} => we need to fix it!
-	if len(watchNamespaces) == 0 {
-		watchNamespaces = []string{""}
-	}
-	log.Debugf("namespaces: %#v", watchNamespaces)
+	kubeInformerFactory := kinformers.NewSharedInformerFactory(kubeClientset, 5*time.Minute)
 
-	ac := acme_controller.NewAcmeController(ctx, clientset.CoreV1(), acmeUrl, watchNamespaces)
-	log.Info("AcmeController bootstraping DB")
-	bootstrapTrace := log.Trace("AcmeController bootstraping DB finished")
-	if err := ac.BootstrapDB(true, true); err != nil {
-		log.Errorf("Unable to bootstrap certificate database: '%+v'", err)
-	}
-	bootstrapTrace.End()
+	routeController := routecontroller.NewRouteController(kubeClientset, kubeInformerFactory)
 
-	log.Info("AcmeController initializing")
-	ac.Start()
-	defer ac.Wait()
-	defer cancel()
-	log.Info("AcmeController started")
+	go kubeInformerFactory.Start(stopCh)
 
-	listenAddr := v.GetString(Flag_Listen_Key)
-	http01, err := challengeexposers.NewHttp01(ctx, listenAddr, log.Logger)
-	if err != nil {
-		log.Fatal(err)
-	}
-	challengeExposers := map[string]acme.ChallengeExposer{
-		"http-01": http01,
-	}
+	//watchNamespaces := v.GetStringSlice(Flag_Watchnamespace_Key)
+	//// spf13/cobra (sadly) treats []string{""} as []string{} => we need to fix it!
+	//if len(watchNamespaces) == 0 {
+	//	watchNamespaces = []string{""}
+	//}
+	//glog.Infof("namespaces: %#v", watchNamespaces)
 
-	selfServiceNamespace := v.GetString(Flag_Selfservicenamespace_Key)
-	if selfServiceNamespace == "" {
-		namespace, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-		if err != nil {
-			selfServiceNamespace = "default"
-			log.Warnf("Unable to autodetect service namespace. Defaulting to namespace '%s'. Error: %s", selfServiceNamespace, err)
-		} else {
-			selfServiceNamespace = string(namespace)
-		}
-	}
-	selfService := route_controller.ServiceID{
-		Name:      v.GetString(Flag_Selfservicename_Key),
-		Namespace: selfServiceNamespace,
-	}
-	rc, err := route_controller.NewRouteController(ctx, clientset.CoreV1(), ac, challengeExposers, selfService, watchNamespaces)
-	if err != nil {
-		log.Errorf("Couln't initialize RouteController: '%s'", err)
-		return err
-	}
-	log.Info("RouteController initializing")
-	rc.Start()
-	defer rc.Wait()
-	defer cancel()
-	log.Info("RouteController started")
+	//selfServiceNamespace := v.GetString(Flag_Selfservicenamespace_Key)
+	//if selfServiceNamespace == "" {
+	//	namespace, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	//	if err != nil {
+	//		selfServiceNamespace = "default"
+	//		glog.Warningf("Unable to autodetect service namespace. Defaulting to namespace '%s'. Error: %s", selfServiceNamespace, err)
+	//	} else {
+	//		selfServiceNamespace = string(namespace)
+	//	}
+	//}
+	//selfService := route_controller.ServiceID{
+	//	Name:      v.GetString(Flag_Selfservicename_Key),
+	//	Namespace: selfServiceNamespace,
+	//}
+	//rc, err := route_controller.NewRouteController(ctx, clientset.CoreV1(), ac, challengeExposers, selfService, watchNamespaces)
+	//if err != nil {
+	//	glog.Errorf("Couln't initialize RouteController: '%s'", err)
+	//	return err
+	//}
+	//glog.Info("RouteController initializing")
+	//rc.Start()
+	//defer rc.Wait()
+	//defer cancel()
+	//glog.Info("RouteController started")
 
 	acDone := make(chan struct{}, 1)
 	go func() {
-		ac.Wait()
+		//ac.Wait()
 		acDone <- struct{}{}
 	}()
 
 	rcDone := make(chan struct{}, 1)
 	go func() {
-		rc.Wait()
+		//rc.Wait()
 		rcDone <- struct{}{}
 	}()
 
@@ -197,7 +179,7 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	case <-rcDone:
 		return errors.New("RouteController ended unexpectedly!")
 	case s := <-signalChannel:
-		log.Infof("Cancelling due to signal '%s'", s)
+		glog.Infof("Cancelling due to signal '%s'", s)
 		return nil
 	}
 }

@@ -182,14 +182,6 @@ func (f *Framework) AfterEach() {
 	}
 }
 
-//// Deprecated: We can get rid of it with OpenShift 3.7, but 3.6 is missing ProjectRequests in new API
-//func (f *Framework) LegacyClient() client.Interface {
-//	client, err := client.New(f.ClientConfig())
-//	o.Expect(err).NotTo(o.HaveOccurred(), "Failed to create legacy client")
-//
-//	return client
-//}
-
 func (f *Framework) RouteClientset() routeclientset.Interface {
 	clientset, err := routeclientset.NewForConfig(f.ClientConfig())
 	o.Expect(err).NotTo(o.HaveOccurred(), "Failed to create route clientset")
