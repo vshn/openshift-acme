@@ -1,0 +1,4 @@
+package: github.com/tnozicka/openshift-acme
+import:
+- package: github.com/openshift/client-go
+  version: master

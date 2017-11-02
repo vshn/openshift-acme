@@ -11,7 +11,7 @@ import (
 	"github.com/tnozicka/openshift-acme/test/e2e/framework"
 	"github.com/tnozicka/openshift-acme/test/e2e/openshift/util"
 
-	routev1 "github.com/openshift/origin/pkg/route/apis/route/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/watch"

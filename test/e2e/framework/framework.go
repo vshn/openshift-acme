@@ -8,18 +8,20 @@ import (
 	g "github.com/onsi/ginkgo"
 	o "github.com/onsi/gomega"
 
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/rest"
 	kclientcmd "k8s.io/client-go/tools/clientcmd"
+	kclientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	oclientcmd "github.com/openshift/origin/pkg/cmd/util/clientcmd"
-	"github.com/openshift/origin/pkg/cmd/util/tokencmd"
-	"github.com/openshift/origin/pkg/oc/cli/config"
-	projectclientset "github.com/openshift/origin/pkg/project/generated/clientset"
-	routeclientset "github.com/openshift/origin/pkg/route/generated/clientset"
+	oauthv1 "github.com/openshift/api/oauth/v1"
+	userv1 "github.com/openshift/api/user/v1"
+	oauthclientset "github.com/openshift/client-go/oauth/clientset/versioned"
+	projectclientset "github.com/openshift/client-go/project/clientset/versioned"
+	routeclientset "github.com/openshift/client-go/route/clientset/versioned"
+	userclientset "github.com/openshift/client-go/user/clientset/versioned"
 )
 
 type Framework struct {
@@ -115,16 +117,54 @@ func (f *Framework) ChangeUser(username string, namespace string) {
 		return
 	}
 
-	token, err := tokencmd.RequestToken(f.AdminClientConfig(), nil, username, "password")
+	user, err := f.UserClientset().UserV1().Users().Create(&userv1.User{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: username,
+		},
+	})
 	o.Expect(err).NotTo(o.HaveOccurred())
 
-	clientConfig := oclientcmd.AnonymousClientConfig(f.AdminClientConfig())
-	clientConfig.BearerToken = token
-
-	f.clientConfig = &clientConfig
-
-	kubeConfig, err := config.CreateConfig(namespace, f.clientConfig)
+	token, err := f.OAuthClientset().OauthV1().OAuthAccessTokens().Create(&oauthv1.OAuthAccessToken{
+		ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-padding_padding_padding_padding_padding_padding_padding", username)},
+		UserName:   user.Name,
+		UserUID:    string(user.UID),
+		ClientName: "openshift-challenging-client",
+	})
 	o.Expect(err).NotTo(o.HaveOccurred())
+
+	f.clientConfig = rest.AnonymousClientConfig(f.AdminClientConfig())
+	f.clientConfig.BearerToken = token.Name
+
+	// Create Kubeconfig
+	kubeConfig := kclientcmdapi.NewConfig()
+
+	credentials := kclientcmdapi.NewAuthInfo()
+	credentials.Token = f.clientConfig.BearerToken
+	credentials.ClientCertificate = f.clientConfig.TLSClientConfig.CertFile
+	if len(credentials.ClientCertificate) == 0 {
+		credentials.ClientCertificateData = f.clientConfig.TLSClientConfig.CertData
+	}
+	credentials.ClientKey = f.clientConfig.TLSClientConfig.KeyFile
+	if len(credentials.ClientKey) == 0 {
+		credentials.ClientKeyData = f.clientConfig.TLSClientConfig.KeyData
+	}
+	kubeConfig.AuthInfos[user.Name] = credentials
+
+	cluster := kclientcmdapi.NewCluster()
+	cluster.Server = f.clientConfig.Host
+	cluster.CertificateAuthority = f.clientConfig.CAFile
+	if len(cluster.CertificateAuthority) == 0 {
+		cluster.CertificateAuthorityData = f.clientConfig.CAData
+	}
+	cluster.InsecureSkipTLSVerify = f.clientConfig.Insecure
+	kubeConfig.Clusters["test"] = cluster
+
+	context := kclientcmdapi.NewContext()
+	context.Cluster = "test"
+	context.AuthInfo = user.Name
+	context.Namespace = namespace
+	kubeConfig.Contexts["test"] = context
+	kubeConfig.CurrentContext = "test"
 
 	tmpFile, err := ioutil.TempFile("", fmt.Sprintf("%s-kubeconfig-", username))
 	o.Expect(err).NotTo(o.HaveOccurred())
@@ -180,6 +220,20 @@ func (f *Framework) AfterEach() {
 			DumpEventsInNamespace(f.KubeClientSet(), ns.Name)
 		}
 	}
+}
+
+func (f *Framework) OAuthClientset() oauthclientset.Interface {
+	clientset, err := oauthclientset.NewForConfig(f.ClientConfig())
+	o.Expect(err).NotTo(o.HaveOccurred(), "Failed to create oauth clientset")
+
+	return clientset
+}
+
+func (f *Framework) UserClientset() userclientset.Interface {
+	clientset, err := userclientset.NewForConfig(f.ClientConfig())
+	o.Expect(err).NotTo(o.HaveOccurred(), "Failed to create oauth clientset")
+
+	return clientset
 }
 
 func (f *Framework) RouteClientset() routeclientset.Interface {

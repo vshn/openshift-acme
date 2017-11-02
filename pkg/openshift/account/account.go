@@ -14,8 +14,8 @@ import (
 	"github.com/tnozicka/openshift-acme/pkg/acme"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	acmelib "golang.org/x/crypto/acme"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	corev1 "k8s.io/client-go/pkg/api/v1"
 )
 
 const (

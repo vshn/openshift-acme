@@ -8,16 +8,16 @@ import (
 	g "github.com/onsi/ginkgo"
 	o "github.com/onsi/gomega"
 
+	"k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/kubernetes/pkg/client/retry"
+	"k8s.io/client-go/util/retry"
 
-	projectapiv1 "github.com/openshift/origin/pkg/project/apis/project/v1"
+	projectapiv1 "github.com/openshift/api/project/v1"
 )
 
 func CreateTestingNamespace(f *Framework, name string, labels map[string]string) (*v1.Namespace, error) {
@@ -134,8 +134,8 @@ func (o byFirstTimestamp) Swap(i, j int) {
 }
 
 func (o byFirstTimestamp) Less(i, j int) bool {
-	if o[i].FirstTimestamp.Equal(o[j].FirstTimestamp) {
+	if o[i].FirstTimestamp.Equal(&o[j].FirstTimestamp) {
 		return o[i].InvolvedObject.Name < o[j].InvolvedObject.Name
 	}
-	return o[i].FirstTimestamp.Before(o[j].FirstTimestamp)
+	return o[i].FirstTimestamp.Before(&o[j].FirstTimestamp)
 }

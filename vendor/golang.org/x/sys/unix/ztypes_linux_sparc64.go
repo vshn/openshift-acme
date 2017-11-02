@@ -652,6 +652,8 @@ type Sigset_t struct {
 	X__val [16]uint64
 }
 
+const _SC_PAGESIZE = 0x1e
+
 type Termios struct {
 	Iflag  uint32
 	Oflag  uint32

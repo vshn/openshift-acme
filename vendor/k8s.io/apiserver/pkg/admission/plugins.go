@@ -67,13 +67,15 @@ func (ps *Plugins) Registered() []string {
 func (ps *Plugins) Register(name string, plugin Factory) {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
-	_, found := ps.registry[name]
-	if found {
-		glog.Fatalf("Admission plugin %q was registered twice", name)
-	}
-	if ps.registry == nil {
+	if ps.registry != nil {
+		_, found := ps.registry[name]
+		if found {
+			glog.Fatalf("Admission plugin %q was registered twice", name)
+		}
+	} else {
 		ps.registry = map[string]Factory{}
 	}
+
 	glog.V(1).Infof("Registered admission plugin %q", name)
 	ps.registry[name] = plugin
 }
@@ -98,7 +100,7 @@ func (ps *Plugins) getPlugin(name string, config io.Reader) (Interface, bool, er
 		return nil, true, nil
 	}
 
-	ret, err := FactoryFilterFn(f)(config2)
+	ret, err := f(config2)
 	return ret, true, err
 }
 
