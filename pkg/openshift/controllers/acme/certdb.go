@@ -13,10 +13,10 @@ import (
 	"github.com/go-playground/log"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	accountlib "github.com/tnozicka/openshift-acme/pkg/openshift/account"
+	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 func hashDomains(domains ...string) string {
@@ -37,7 +37,7 @@ type DbAccountEntry struct {
 	account                 *accountlib.Account
 	kclient                 corev1client.CoreV1Interface
 	certificatesMutex       sync.Mutex
-	syncCertificatesChannel chan []*cert.Certificate
+	syncCertificatesChannel chan []*cert.CertPemData
 	syncCertificatesWg      sync.WaitGroup
 	ctx                     context.Context
 	ctxCancel               context.CancelFunc
@@ -52,7 +52,7 @@ func NewDbAccountEntry(ctx context.Context, account *accountlib.Account, kclient
 		db:                      make(map[string]*DbCertEntry),
 		ctx:                     ctx,
 		ctxCancel:               cancel,
-		syncCertificatesChannel: make(chan []*cert.Certificate, 100),
+		syncCertificatesChannel: make(chan []*cert.CertPemData, 100),
 	}
 
 	e.syncCertificatesWg.Add(1)
@@ -126,7 +126,7 @@ func (e *DbAccountEntry) GetAccountSecret() (*corev1.Secret, error) {
 	return e.account.ToSecret()
 }
 
-func (e *DbAccountEntry) AddCertificates(c ...*cert.Certificate) {
+func (e *DbAccountEntry) AddCertificates(c ...*cert.CertPemData) {
 	e.certificatesMutex.Lock()
 	defer e.certificatesMutex.Unlock()
 
@@ -194,7 +194,7 @@ func (d *CertDB) RemoveObject(account *accountlib.Account, o AcmeObject) {
 	entry.RemoveObject(o)
 }
 
-func (d *CertDB) AddCertificate(account *accountlib.Account, certificate *cert.Certificate) {
+func (d *CertDB) AddCertificate(account *accountlib.Account, certificate *cert.CertPemData) {
 	log.Debug("Adding object")
 	domainsKey := hashDomains(certificate.Domains()...)
 
@@ -255,7 +255,7 @@ func (db *CertDB) LoadAccount(ctx context.Context, secret *corev1.Secret, acmeur
 	}
 
 	// we need to choose only one certificate per domains if there are more
-	certificatesByDomain := make(map[string]*cert.Certificate)
+	certificatesByDomain := make(map[string]*cert.CertPemData)
 	t := time.Now()
 	for _, c := range account.Certificates {
 		h := hashDomains(c.Domains()...)

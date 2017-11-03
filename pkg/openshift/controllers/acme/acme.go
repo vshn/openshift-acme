@@ -20,8 +20,8 @@ type AcmeObject interface {
 	GetDomains() []string
 	GetNamespace() string
 	GetUID() string
-	GetCertificate() *cert.Certificate
-	UpdateCertificate(c *cert.Certificate) error
+	GetCertificate() *cert.CertPemData
+	UpdateCertificate(c *cert.CertPemData) error
 	GetExposers() map[string]acme.ChallengeExposer
 }
 

@@ -15,7 +15,7 @@ type DbCertEntry struct {
 	ctx           context.Context
 	ctxCancel     context.CancelFunc
 	inProgress    bool
-	certificate   *cert.Certificate
+	certificate   *cert.CertPemData
 	objects       map[string]AcmeObject
 	failedCounter int
 }
@@ -46,7 +46,7 @@ func (e *DbCertEntry) updateCertificate() {
 	}
 }
 
-func (e *DbCertEntry) UpdateCertificate(certificate *cert.Certificate) {
+func (e *DbCertEntry) UpdateCertificate(certificate *cert.CertPemData) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 

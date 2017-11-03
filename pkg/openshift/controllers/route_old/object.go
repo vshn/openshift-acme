@@ -13,10 +13,10 @@ import (
 	oapi "github.com/tnozicka/openshift-acme/pkg/openshift/api"
 	oschallengeexposers "github.com/tnozicka/openshift-acme/pkg/openshift/challengeexposers"
 	"github.com/tnozicka/openshift-acme/pkg/openshift/untypedclient"
+	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientv1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 func AcmeRouteHash(r oapi.Route) string {
@@ -63,8 +63,8 @@ func (o *RouteObject) GetUID() string {
 	return fmt.Sprintf("route/%s/%s", o.GetNamespace(), o.GetName())
 }
 
-func (o *RouteObject) GetCertificate() *cert.Certificate {
-	c := &cert.Certificate{}
+func (o *RouteObject) GetCertificate() *cert.CertPemData {
+	c := &cert.CertPemData{}
 
 	if o.route.Spec.Tls != nil {
 		c.Key = []byte(o.route.Spec.Tls.Key)
@@ -103,7 +103,7 @@ func (o *RouteObject) GetExposers() map[string]acme.ChallengeExposer {
 	return exposers
 }
 
-func (o *RouteObject) UpdateCertificate(c *cert.Certificate) error {
+func (o *RouteObject) UpdateCertificate(c *cert.CertPemData) error {
 	o.route.Annotations["kubernetes.io/tls-acme.last-update-time"] = time.Now().Format(time.RFC3339)
 	name := o.GetName()
 	namespace := o.GetNamespace()

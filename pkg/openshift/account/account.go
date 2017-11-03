@@ -37,7 +37,7 @@ type Authorization struct {
 
 type Account struct {
 	Client         acme.Client
-	Certificates   []*cert.Certificate
+	Certificates   []*cert.CertPemData
 	authorizations []*Authorization
 	Secret         *corev1.Secret
 }

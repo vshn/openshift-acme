@@ -182,7 +182,7 @@ func (e DomainsAuthorizationError) Error() (res string) {
 	return fmt.Sprint(e.FailedDomains)
 }
 
-func (c *Client) ObtainCertificate(ctx context.Context, domains []string, exposers map[string]ChallengeExposer, onlyForAllDomains bool) (certificate *cert.Certificate, err error) {
+func (c *Client) ObtainCertificate(ctx context.Context, domains []string, exposers map[string]ChallengeExposer, onlyForAllDomains bool) (certificate *cert.CertPemData, err error) {
 	defer log.Trace("acme.Client ObtainCertificate").End()
 	var wg sync.WaitGroup
 	results := make([]error, len(domains))

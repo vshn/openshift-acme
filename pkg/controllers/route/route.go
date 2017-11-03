@@ -21,6 +21,9 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/tnozicka/openshift-acme/pkg/api"
+	"github.com/tnozicka/openshift-acme/pkg/cert"
+	routeutil "github.com/tnozicka/openshift-acme/pkg/route"
 	"github.com/tnozicka/openshift-acme/pkg/util"
 )
 
@@ -175,6 +178,60 @@ func (rc *RouteController) deleteRoute(obj interface{}) {
 	rc.enqueueRoute(route)
 }
 
+func (rc *RouteController) getState(t time.Time, route *routev1.Route) api.AcmeState {
+	if route.Annotations != nil {
+		_, ok := route.Annotations[api.AcmeAwaitingAuthzUrlAnnotation]
+		if ok {
+			return api.AcmeAwaitingAuthzUrlAnnotation
+		}
+	}
+
+	if route.Spec.TLS == nil {
+		return api.AcmeStateNeedsCert
+	}
+
+	certPemData := &cert.CertPemData{
+		Key: []byte(route.Spec.TLS.Key),
+		Crt: []byte(route.Spec.TLS.Certificate),
+	}
+	certificate, err := certPemData.Certificate()
+	if err != nil {
+		glog.Errorf("Failed to decode certificate from route %s/%s", route.Namespace, route.Name)
+		return api.AcmeStateNeedsCert
+	}
+
+	err = certificate.VerifyHostname(route.Spec.Host)
+	if err != nil {
+		glog.Errorf("Certificate is invalid for route %s/%s with hostname %q", route.Namespace, route.Name, route.Spec.Host)
+		return api.AcmeStateNeedsCert
+	}
+
+	if !cert.IsValid(certificate, t) {
+		return api.AcmeStateNeedsCert
+	}
+
+	// We need to trigger renewals before the certs expire
+	remains := certificate.NotAfter.Sub(t)
+	lifetime := certificate.NotAfter.Sub(certificate.NotBefore)
+
+	// This is the deadline when we start renewing
+	if remains <= lifetime/3 {
+		glog.Infof("Renewing cert because we reached a deadline of %s", remains)
+		return api.AcmeStateNeedsCert
+	}
+
+	// In case many certificates were provisioned at specific time
+	// We will try to avoid spikes by renewing randomly
+	if remains <= lifetime/2 {
+		glog.Infof("Renewing cert in advance with %s remaining to spread the load.", remains)
+		// TODO: random distribution to spread the load
+
+		return api.AcmeStateNeedsCert
+	}
+
+	return api.AcmeStateOk
+}
+
 // handle is the business logic of the controller.
 // In case an error happened, it has to simply return the error.
 // The retry logic should not be part of the business logic.
@@ -199,6 +256,13 @@ func (rc *RouteController) handle(key string) error {
 
 	// Deep copy to avoid mutating the cache
 	routeReadOnly := objReadOnly.(*routev1.Route)
+
+	// We have to check if Route is admitted to be sure it owns the domain!
+	if !routeutil.IsAdmitted(routeReadOnly) {
+		glog.V(4).Infof("Skipping Route %s/%s because it's not admitted", key)
+		return nil
+	}
+
 	route := routeReadOnly.DeepCopy()
 
 	glog.Infof("%v", route)
