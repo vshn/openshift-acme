@@ -8,13 +8,17 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/go-playground/log"
+	"github.com/golang/glog"
 	"golang.org/x/crypto/acme"
 )
 
+const (
+	ShutdownTimeout = 3 * time.Second
+)
+
 type Http01 struct {
-	logger  log.LeveledLogger
 	mapping map[string]string
 	mutex   sync.RWMutex
 	Addr    string
@@ -33,7 +37,7 @@ func (h *Http01) handler(w http.ResponseWriter, r *http.Request) {
 
 	uri := strings.Split(r.Host, ":")[0] + r.URL.String()
 	key, found := h.getKey(uri)
-	log.Debugf("url = '%s'; found = '%t'", uri, found)
+	glog.V(4).Infof("url = '%s'; found = '%t'", uri, found)
 	if found {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, key)
@@ -44,15 +48,13 @@ func (h *Http01) handler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func NewHttp01(context context.Context, addr string, logger log.LeveledLogger) (h *Http01, err error) {
-	h = &Http01{
-		logger:  logger,
+func NewHttp01(ctx context.Context, addr string) (*Http01, error) {
+	s := &Http01{
 		mapping: make(map[string]string),
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", h.handler)
-
+	mux.HandleFunc("/", s.handler)
 	server := &http.Server{
 		Addr:    addr,
 		Handler: mux,
@@ -60,25 +62,23 @@ func NewHttp01(context context.Context, addr string, logger log.LeveledLogger) (
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	// if you don't specify addr (e.g. port) we need to find to which it was bound so e.g. tests can use it
-	h.Addr = listener.Addr().String()
-	h.logger.Infof("Http-01: server listening on http://%s/", h.Addr)
-
-	// TODO: rewrite this to use Shutdown method once we have Go 1.8
-	go func() {
-		<-context.Done()
-		h.logger.Infof("Http-01: stopping server listening on http://%s/", h.Addr)
-		listener.Close()
-	}()
+	s.Addr = listener.Addr().String()
+	glog.Infof("Http-01: server listening on http://%s/", s.Addr)
 
 	go func() {
-		h.logger.Error(server.Serve(listener))
+		<-ctx.Done()
+		glog.Infof("Http-01: stopping server listening on http://%s/", s.Addr)
+		ctx, _ := context.WithTimeout(ctx, ShutdownTimeout)
+		server.Shutdown(ctx)
 	}()
 
-	return
+	go server.Serve(listener)
+
+	return s, nil
 }
 
 func getHttp01Uri(a *acme.Client, domain string, token string) (url string) {

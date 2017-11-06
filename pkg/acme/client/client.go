@@ -1,4 +1,4 @@
-package acme
+package client
 
 import (
 	"context"
@@ -11,15 +11,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-playground/log"
+	"github.com/golang/glog"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	"golang.org/x/crypto/acme"
 )
 
-//func(tosURL string) bool {
-//	c.Logger.Infof("By continuing running this program you aggree to the CA's Terms of Service (%s). If you do not agree exit the program immediately!", tosURL)
-//	return true
-//}
+func acceptTerms(tosURL string) bool {
+	glog.Infof("By continuing running this program you agree to the CA's Terms of Service (%s). If you do not agree exit the program immediately!", tosURL)
+	return true
+}
 
 // Has to support concurrent calls
 type ChallengeExposer interface {
@@ -31,18 +31,17 @@ type ChallengeExposer interface {
 }
 
 type Client struct {
-	//Logger *log.Entry
 	Client  *acme.Client
 	Account *acme.Account
 }
 
-func (c *Client) CreateAccount(ctx context.Context, a *acme.Account, prompt func(tosURL string) bool) (err error) {
+func (c *Client) CreateAccount(ctx context.Context, a *acme.Account) (err error) {
 	c.Client.Key, err = rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return
 	}
 
-	c.Account, err = c.Client.Register(ctx, c.Account, prompt)
+	c.Account, err = c.Client.Register(ctx, a, acceptTerms)
 	if err != nil {
 		return
 	}
@@ -62,7 +61,7 @@ func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map
 	}
 	defer func() {
 		if err != nil && authorization != nil {
-			log.Debugf("Revoking authorization '%s' for domain '%s'", authorization, domain)
+			glog.V(4).Infof("Revoking authorization '%s' for domain '%s'", authorization, domain)
 			// We can't use the default context because this call has to be done even if ctx is done (canceling)
 			shortCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
@@ -77,7 +76,7 @@ func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map
 	}
 
 	// TODO: prefer faster combinations like http-01 before dns-01 with cost based estimation
-	log.Debugf("Authorization: %+v", authorization)
+	glog.V(4).Infof("Authorization: %+v", authorization)
 
 	found := false
 	for _, combination := range authorization.Combinations {
@@ -143,7 +142,7 @@ func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map
 			}
 		}
 		if err != nil {
-			log.Error(err)
+			glog.Error(err)
 			return
 		}
 
@@ -158,7 +157,7 @@ func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map
 	// TODO: consider implementing a timeout in case something went wrong
 	authorization, err = c.Client.WaitAuthorization(ctx, authorization.URI)
 	if err != nil {
-		log.Errorf("Authorization failed: %+v", err)
+		glog.Errorf("Authorization failed: %+v", err)
 		return
 	}
 
@@ -183,7 +182,7 @@ func (e DomainsAuthorizationError) Error() (res string) {
 }
 
 func (c *Client) ObtainCertificate(ctx context.Context, domains []string, exposers map[string]ChallengeExposer, onlyForAllDomains bool) (certificate *cert.CertPemData, err error) {
-	defer log.Trace("acme.Client ObtainCertificate").End()
+	//defer log.Trace("acme.Client ObtainCertificate").End()
 	var wg sync.WaitGroup
 	results := make([]error, len(domains))
 	for i, domain := range domains {
@@ -195,7 +194,7 @@ func (c *Client) ObtainCertificate(ctx context.Context, domains []string, expose
 		}(i, domain)
 	}
 	wg.Wait()
-	log.Info("finished validating domains")
+	glog.V(4).Info("finished validating domains")
 
 	validatedDomains := []string{}
 	var domainsError DomainsAuthorizationError

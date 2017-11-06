@@ -1,10 +1,13 @@
 package api
 
+const (
+	ForwardingRouteSuffing = "acme_forwarder"
+)
 
 type AcmeState string
 
 const (
-	AcmeStateOk = "OK"
-	AcmeStateWaiting = "NeedsCertificate"
-	AcmeStateNeedsCert = "NeedsCertificate"
+	AcmeStateNeedsCert       = "NeedsCertificate"
+	AcmeStateWaitingForAuthz = "WaitingForAuthz"
+	AcmeStateOk              = "OK"
 )

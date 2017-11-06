@@ -13,14 +13,18 @@ import (
 	routeinformersv1 "github.com/openshift/client-go/route/informers/externalversions/route/v1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	cmdutil "github.com/tnozicka/openshift-acme/pkg/cmd/util"
-	routecontroller "github.com/tnozicka/openshift-acme/pkg/controllers/route"
-	"github.com/tnozicka/openshift-acme/pkg/signals"
 	kcoreinformersv1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"context"
+
+	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
+	cmdutil "github.com/tnozicka/openshift-acme/pkg/cmd/util"
+	routecontroller "github.com/tnozicka/openshift-acme/pkg/controllers/route"
+	"github.com/tnozicka/openshift-acme/pkg/signals"
 )
 
 const (
@@ -115,6 +119,11 @@ func getClientConfig(kubeConfigPath string) *restclient.Config {
 
 func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	stopCh := signals.StopChannel()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-stopCh
+		cancel()
+	}()
 
 	acmeUrl := v.GetString(Flag_Acmeurl_Key)
 	glog.Infof("ACME server url is '%s'", acmeUrl)
@@ -154,6 +163,8 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 		selfServiceNamespace = (string)(selfServiceNamespaceBytes)
 	}
 
+	//accountSecret, err := kubeClientset.CoreV1().Secrets(selfServiceNamespace).Get()
+
 	routeInformer := routeinformersv1.NewRouteInformer(routeClientset, namespace, ResyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	glog.Infof("Starting Route informer")
 	go routeInformer.Run(stopCh)
@@ -162,7 +173,12 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	glog.Infof("Starting Secret informer")
 	go secretInformer.Run(stopCh)
 
-	rc := routecontroller.NewRouteController(routeClientset, kubeClientset, routeInformer, secretInformer, selfServiceNamespace, selfServiceName)
+	exposer, err := challengeexposers.NewHttp01(ctx, ":80")
+	if err != nil {
+		return err
+	}
+
+	rc := routecontroller.NewRouteController(exposer, routeClientset, kubeClientset, routeInformer, secretInformer, selfServiceNamespace, selfServiceName)
 	go rc.Run(Workers, stopCh)
 
 	<-stopCh

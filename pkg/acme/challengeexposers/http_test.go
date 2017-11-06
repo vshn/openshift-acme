@@ -14,8 +14,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/go-playground/log"
-	"github.com/go-playground/log/handlers/console"
 	"golang.org/x/crypto/acme"
 )
 
@@ -55,9 +53,6 @@ var (
 )
 
 func init() {
-	cLog := console.New()
-	log.RegisterHandler(cLog, log.AllLevels...)
-
 	d, _ := pem.Decode([]byte(testKeyPEM))
 	if d == nil {
 		panic("no block found in testKeyPEM")
@@ -73,6 +68,7 @@ type FakeKey struct{}
 func (FakeKey) Public() crypto.PublicKey {
 	return nil
 }
+
 func (FakeKey) Sign(io.Reader, []byte, crypto.SignerOpts) ([]byte, error) {
 	return []byte{}, nil
 }
@@ -83,7 +79,7 @@ func TestHttp01_Expose(t *testing.T) {
 		Key: FakeKey{},
 	}
 
-	h, err := NewHttp01(context.Background(), "127.0.0.1:0", log.Logger)
+	h, err := NewHttp01(context.Background(), "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,18 +92,16 @@ func TestHttp01_Expose(t *testing.T) {
 }
 
 func TestHttp01NonExistingAddr(t *testing.T) {
-	_, err := NewHttp01(context.Background(), "666.0.0.0:0", log.Logger)
-
+	_, err := NewHttp01(context.Background(), "666.0.0.0:0")
 	if err == nil {
 		t.Fatalf("setting invalid ip should have ended up with an error")
 	}
-
 }
 
 func TestHttp01(t *testing.T) {
 	// TODO: consider adding context
 
-	h, err := NewHttp01(context.Background(), "127.0.0.1:0", log.Logger)
+	h, err := NewHttp01(context.Background(), "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

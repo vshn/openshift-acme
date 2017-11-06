@@ -2,14 +2,16 @@ package route
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/golang/glog"
-
 	routev1 "github.com/openshift/api/route/v1"
 	routeclientset "github.com/openshift/client-go/route/clientset/versioned"
 	routelistersv1 "github.com/openshift/client-go/route/listers/route/v1"
 	corev1 "k8s.io/api/core/v1"
+	kapierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -21,6 +23,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
 	"github.com/tnozicka/openshift-acme/pkg/api"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	routeutil "github.com/tnozicka/openshift-acme/pkg/route"
@@ -28,8 +31,10 @@ import (
 )
 
 const (
-	ControllerName = "openshift-acme-controller"
-	MaxRetries     = 5
+	ControllerName           = "openshift-acme-controller"
+	MaxRetries               = 5
+	RenewalStandardDeviation = 1
+	RenewalMean              = 0
 )
 
 var (
@@ -37,6 +42,9 @@ var (
 )
 
 type RouteController struct {
+	// TODO: switch this for generic interface to allow other types like DNS01
+	exposer *challengeexposers.Http01
+
 	routeIndexer cache.Indexer
 
 	routeClientset routeclientset.Interface
@@ -64,6 +72,7 @@ type RouteController struct {
 }
 
 func NewRouteController(
+	exposer *challengeexposers.Http01,
 	routeClientset routeclientset.Interface,
 	kubeClientset kubernetes.Interface,
 	routeInformer cache.SharedIndexInformer,
@@ -76,6 +85,8 @@ func NewRouteController(
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeClientset.CoreV1().Events("")})
 
 	rc := &RouteController{
+		exposer: exposer,
+
 		routeIndexer: routeInformer.GetIndexer(),
 
 		routeClientset: routeClientset,
@@ -178,6 +189,7 @@ func (rc *RouteController) deleteRoute(obj interface{}) {
 	rc.enqueueRoute(route)
 }
 
+// TODO: extract this function to be re-used by ingress controller
 func (rc *RouteController) getState(t time.Time, route *routev1.Route) api.AcmeState {
 	if route.Annotations != nil {
 		_, ok := route.Annotations[api.AcmeAwaitingAuthzUrlAnnotation]
@@ -223,19 +235,101 @@ func (rc *RouteController) getState(t time.Time, route *routev1.Route) api.AcmeS
 	// In case many certificates were provisioned at specific time
 	// We will try to avoid spikes by renewing randomly
 	if remains <= lifetime/2 {
-		glog.Infof("Renewing cert in advance with %s remaining to spread the load.", remains)
-		// TODO: random distribution to spread the load
-
-		return api.AcmeStateNeedsCert
+		// We need to randomize renewals to spread the load.
+		// Closer to deadline, bigger chance
+		s := rand.NewSource(t.UnixNano())
+		r := rand.New(s)
+		n := r.NormFloat64()*RenewalStandardDeviation + RenewalMean
+		// We use left half of normal distribution (all negative numbers).
+		if n < 0 {
+			glog.V(4).Infof("Renewing cert in advance with %s remaining to spread the load.", remains)
+			return api.AcmeStateNeedsCert
+		}
 	}
 
 	return api.AcmeStateOk
+}
+
+func (rc *RouteController) expose(route *routev1.Route) error {
+	// Name of the forwarding Service and Route
+	name := fmt.Sprintf("%s-%s", route.Name, api.ForwardingRouteSuffing)
+
+	true := true
+	// Forwarding Route and Service share ObjectMeta
+	meta := metav1.ObjectMeta{
+		Name: name,
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion:         route.APIVersion,
+				Kind:               route.Kind,
+				Name:               route.Name,
+				UID:                route.UID,
+				Controller:         &true,
+				BlockOwnerDeletion: &true,
+			},
+		},
+	}
+
+	// Route can only point to a Service in the same namespace
+	// but we need to redirect ACME challenge to the ACME service
+	// usually deployed in a different namespace.
+	// We avoid this limitation by creating a forwarding service.
+	// Note that this requires working DNS in your cluster.
+	s := &corev1.Service{
+		ObjectMeta: meta,
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeExternalName,
+			// TODO: Autodetect cluster suffix or fix Kubernetes to correctly resolve cluster QDN instead of FQDN only
+			ExternalName: fmt.Sprintf("%s.%s.svc.cluster.local.", rc.selfServiceName, rc.selfServiceNamespace),
+		},
+	}
+	createS, err := rc.kubeClientset.CoreV1().Services(route.Namespace).Create(s)
+	if err != nil {
+		if !kapierrors.IsAlreadyExists(err) {
+			return err
+		}
+
+		glog.Errorf("Forwarding Service %s/%s already exists, forcing rewrite")
+		s.ResourceVersion = createS.ResourceVersion
+		_, err = rc.kubeClientset.CoreV1().Services(route.Namespace).Update(s)
+	}
+
+	// Create Route to accept the traffic for ACME challenge
+	r := &routev1.Route{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         route.APIVersion,
+					Kind:               route.Kind,
+					Name:               route.Name,
+					UID:                route.UID,
+					Controller:         &true,
+					BlockOwnerDeletion: &true,
+				},
+			},
+		},
+	}
+
+	createR, err := rc.routeClientset.RouteV1().Routes(route.Namespace).Create(r)
+	if err != nil {
+		if !kapierrors.IsAlreadyExists(err) {
+			return err
+		}
+
+		glog.Errorf("Forwarding Route %s/%s already exists, forcing rewrite")
+		r.ResourceVersion = createR.ResourceVersion
+		_, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(r)
+	}
+
+	return nil
 }
 
 // handle is the business logic of the controller.
 // In case an error happened, it has to simply return the error.
 // The retry logic should not be part of the business logic.
 // This function is not meant to be invoked concurrently with the same key.
+// TODO: extract common parts to be re-used by ingress controller
 func (rc *RouteController) handle(key string) error {
 	startTime := time.Now()
 	glog.V(4).Infof("Started syncing Route %q (%v)", key, startTime)
@@ -261,6 +355,18 @@ func (rc *RouteController) handle(key string) error {
 	if !routeutil.IsAdmitted(routeReadOnly) {
 		glog.V(4).Infof("Skipping Route %s/%s because it's not admitted", key)
 		return nil
+	}
+
+	state := rc.getState(startTime, routeReadOnly)
+	switch state {
+	case api.AcmeStateNeedsCert:
+		// TODO: Add TTL based lock to allow only one domain to enter this stage
+		rc.exposer.Expose()
+		rc.expose(routeReadOnly)
+	case api.AcmeStateWaitingForAuthz:
+	case api.AcmeStateOk:
+	default:
+		return fmt.Errorf("Failed to determine state for Route: %#v", routeReadOnly)
 	}
 
 	route := routeReadOnly.DeepCopy()
