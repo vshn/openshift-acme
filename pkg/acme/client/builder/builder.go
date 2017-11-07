@@ -1,32 +1,29 @@
 package builder
 
 import (
-	"errors"
-	"fmt"
 	"context"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
+	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	acmelib "golang.org/x/crypto/acme"
+	corev1 "k8s.io/api/core/v1"
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/client-go/kubernetes"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
-	acmeclient "github.com/tnozicka/openshift-acme/pkg/acme/client"
 	"github.com/golang/glog"
+	acmeclient "github.com/tnozicka/openshift-acme/pkg/acme/client"
 )
 
 const (
-	AnnotationAcmeAccountContactsKey = "kubernetes.io/acme.account-contacts"
-	DataAcmeAccountUrlKey            = "acme.account-url"
-	DataTlslKey                      = "tls.key"
-	LabelAcmeTypeKey                 = "kubernetes.io/acme.type"
-	LabelAcmeAccountType             = "account"
-)
-
-var (
-	LabelSelectorAcmeAccount = fmt.Sprintf("%s=%s", LabelAcmeTypeKey, LabelAcmeAccountType)
+	DataAcmeAccountUrlKey          = "acme.account-url"
+	DataAcmeAccountDirectoryUrlKey = "acme.account-created-at-directory-url"
+	DataTlslKey                    = "tls.key"
+	LabelAcmeTypeKey               = "kubernetes.io/acme.type"
+	LabelAcmeAccountType           = "account"
 )
 
 type SecretNamespaceGetter interface {
@@ -66,73 +63,112 @@ func BuildClientFromSecret(secret *corev1.Secret, acmeUrl string) (*acmeclient.C
 			URI: url,
 		},
 		Client: &acmelib.Client{
-			Key: key,
+			Key:          key,
 			DirectoryURL: acmeUrl,
 		},
 	}, nil
 }
 
-type clientFactory struct {
-	acmeUrl string
-	secretName string
+func SecretFromClient(client *acmeclient.Client) (*corev1.Secret, error) {
+	key, ok := client.Client.Key.(*rsa.PrivateKey)
+	if !ok {
+		err := fmt.Errorf("unsupported key type '%T'", client.Client.Key)
+		return nil, err
+	}
+
+	keyPem := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				LabelAcmeTypeKey: LabelAcmeAccountType,
+			},
+		},
+		Data: map[string][]byte{
+			DataAcmeAccountUrlKey: []byte(client.Account.URI),
+			DataTlslKey:           keyPem,
+			//DataAcmeAccountDirectoryUrlKey: client
+		},
+	}
+
+	return secret, nil
+}
+
+func SetSpecificAnnotationsForNewAccount(secret *corev1.Secret, acmeUrl string) {
+	if secret.Data == nil {
+		secret.Data = make(map[string][]byte)
+	}
+	secret.Data[DataAcmeAccountDirectoryUrlKey] = []byte(acmeUrl)
+}
+
+type SharedClientFactory struct {
+	acmeUrl         string
+	secretName      string
 	secretNamespace string
-	kubeClientset kubernetes.Interface
-	secretGetter SecretGetter
+	kubeClientset   kubernetes.Interface
+	secretGetter    SecretGetter
 }
 
-func NewClientFactory(acmeUrl, secretName, secretNamespace string, kubeClientset kubernetes.Interface, secretGetter SecretGetter) *clientFactory {
-	return &clientFactory{
-		acmeUrl: acmeUrl,
-		secretName: secretName,
+func NewSharedClientFactory(acmeUrl, secretName, secretNamespace string, kubeClientset kubernetes.Interface, secretGetter SecretGetter) *SharedClientFactory {
+	return &SharedClientFactory{
+		acmeUrl:         acmeUrl,
+		secretName:      secretName,
 		secretNamespace: secretNamespace,
-		kubeClientset: kubeClientset,
-		secretGetter: secretGetter,
+		kubeClientset:   kubeClientset,
+		secretGetter:    secretGetter,
 	}
 }
 
-func (f *clientFactory) newAccountClient(ctx context.Context) (*acmeclient.Client, error) {
-	account := &acmelib.Account{
-
-	}
-
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: f.secretName,
-
+func (f *SharedClientFactory) clientByRegisteringNewAccount(ctx context.Context, account *acmelib.Account) (*acmeclient.Client, error) {
+	client := &acmeclient.Client{
+		Client: &acmelib.Client{
+			DirectoryURL: f.acmeUrl,
 		},
-		//Data:
+		Account: &acmelib.Account{},
 	}
+
+	err := client.CreateAccount(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	glog.Infof("Registered new ACME account %q", client.Account.URI)
+
+	return client, nil
 }
 
-func (f *clientFactory) newAccountSecret() *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: f.secretName,
-
-		},
-		//Data:
-	}
-}
-
-func (f *clientFactory) GetClient(ctx context.Context) (*acmeclient.Client, error) {
+func (f *SharedClientFactory) GetClient(ctx context.Context) (*acmeclient.Client, error) {
 	secret, err := f.secretGetter.Secrets(f.secretNamespace).Get(f.secretName)
 	if err != nil {
 		if !kapierrors.IsNotFound(err) {
 			return nil, err
 		}
 
-		secret, err = f.kubeClientset.CoreV1().Secrets(f.secretNamespace).Create(f.newAccountSecret())
+		// Register new ACME account
+		client, err := f.clientByRegisteringNewAccount(ctx, &acmelib.Account{})
 		if err != nil {
-			if !kapierrors.IsAlreadyExists(err) {
-				return nil, err
-			}
-		} else {
-		glog.Infof("Created new ACME account %s/%s", f.secretNamespace, f.secretName)
-
+			return nil, err
 		}
-	}
+		secret, err = SecretFromClient(client)
+		if err != nil {
+			return nil, err
+		}
+		SetSpecificAnnotationsForNewAccount(secret, f.acmeUrl)
 
-	// TODO: if the account has empty URL register new one with the key
+		secret, err = f.kubeClientset.CoreV1().Secrets(f.secretNamespace).Create(secret)
+		if err == nil {
+			glog.Infof("Saved new ACME account %s/%s", f.secretNamespace, f.secretName)
+			return client, nil
+		}
+
+		if !kapierrors.IsAlreadyExists(err) {
+			return nil, err
+		}
+
+		// Someone created new account just in the interim but that's ok
+	}
 
 	return BuildClientFromSecret(secret, f.acmeUrl)
 }

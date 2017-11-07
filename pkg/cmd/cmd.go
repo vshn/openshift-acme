@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -13,31 +14,33 @@ import (
 	routeinformersv1 "github.com/openshift/client-go/route/informers/externalversions/route/v1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	kvalidation "k8s.io/apimachinery/pkg/api/validation"
 	kcoreinformersv1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
+	kcorelistersv1 "k8s.io/client-go/listers/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"context"
-
 	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
+	acmeclientbuilder "github.com/tnozicka/openshift-acme/pkg/acme/client/builder"
 	cmdutil "github.com/tnozicka/openshift-acme/pkg/cmd/util"
 	routecontroller "github.com/tnozicka/openshift-acme/pkg/controllers/route"
 	"github.com/tnozicka/openshift-acme/pkg/signals"
 )
 
 const (
-	DefaultLoglevel               = 0
-	Flag_LogLevel_Key             = "loglevel"
-	Flag_Kubeconfig_Key           = "kubeconfig"
-	Flag_Listen_Key               = "listen"
-	Flag_Acmeurl_Key              = "acmeurl"
-	Flag_Selfservicename_Key      = "selfservicename"
-	Flag_Selfservicenamespace_Key = "selfservicenamespace"
-	Flag_Namespace_Key            = "namespace"
-	ResyncPeriod                  = 10 * time.Minute
-	Workers                       = 10
+	DefaultLoglevel          = 0
+	Flag_LogLevel_Key        = "loglevel"
+	Flag_Kubeconfig_Key      = "kubeconfig"
+	Flag_Listen_Key          = "listen"
+	Flag_Acmeurl_Key         = "acmeurl"
+	Flag_SelfServiceName_Key = "selfservicename"
+	Flag_SelfNamespace_Key   = "selfnamespace"
+	Flag_Namespace_Key       = "namespace"
+	Flag_AccountName_Key     = "account-name"
+	ResyncPeriod             = 10 * time.Minute
+	Workers                  = 10
 )
 
 func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
@@ -64,8 +67,8 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Kubeconfig_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Listen_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Acmeurl_Key)
-			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Selfservicename_Key)
-			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Selfservicenamespace_Key)
+			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_SelfServiceName_Key)
+			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_SelfNamespace_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Namespace_Key)
 
 			return nil
@@ -79,8 +82,9 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 	rootCmd.PersistentFlags().StringP(Flag_Listen_Key, "", "0.0.0.0:5000", "Listen address for http-01 server")
 	rootCmd.PersistentFlags().StringP(Flag_Acmeurl_Key, "", "https://acme-staging.api.letsencrypt.org/directory", "ACME URL like https://acme-v01.api.letsencrypt.org/directory")
 	rootCmd.PersistentFlags().StringP(Flag_Namespace_Key, "n", "", "Restricts controller to namespace. If not specified controller watches all namespaces.")
-	rootCmd.PersistentFlags().StringP(Flag_Selfservicename_Key, "", "acme-controller", "Name of the service pointing to a pod with this program.")
-	rootCmd.PersistentFlags().StringP(Flag_Selfservicenamespace_Key, "", "", "Namespace of the service pointing to a pod with this program. Defaults to current namespace this program is running inside; if run outside of the cluster defaults to 'default' namespace")
+	rootCmd.PersistentFlags().StringP(Flag_AccountName_Key, "", "acme-account", "Restricts controller to namespace. If not specified controller watches all namespaces.")
+	rootCmd.PersistentFlags().StringP(Flag_SelfServiceName_Key, "", "acme-controller", "Name of the service pointing to a pod with this program.")
+	rootCmd.PersistentFlags().StringP(Flag_SelfNamespace_Key, "", "", "Namespace where this controller and associated objects are deployed to. Defaults to current namespace if this program is running inside of the cluster.")
 
 	from := flag.CommandLine
 	if flag := from.Lookup("v"); flag != nil {
@@ -144,26 +148,46 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	if namespace == "" {
 		glog.Info("Watching all namespaces.")
 	} else {
+		errs := kvalidation.ValidateNamespaceName(namespace, false)
+		if len(errs) > 0 {
+			return fmt.Errorf("flag %q has invalid value: %s", Flag_Namespace_Key, strings.Join(errs, ", "))
+		}
 		glog.Infof("Watching only namespace %q.", namespace)
 	}
 
-	selfServiceName := v.GetString(Flag_Selfservicename_Key)
-	if selfServiceName == "" {
-		return fmt.Errorf("%q can't be empty", Flag_Selfservicename_Key)
-		// TODO: try bootstraping by (only this podIP) -> Endpoint -> Service
+	accountName := v.GetString(Flag_AccountName_Key)
+	if accountName == "" {
+		return fmt.Errorf("flag %q can't be empty string", Flag_AccountName_Key)
+	}
+	errs := kvalidation.NameIsDNSSubdomain(accountName, false)
+	if len(errs) > 0 {
+		return fmt.Errorf("flag %q has invalid value: %s", Flag_AccountName_Key, strings.Join(errs, ", "))
 	}
 
-	selfServiceNamespace := v.GetString(Flag_Selfservicenamespace_Key)
-	if selfServiceNamespace == "" {
-		glog.V(4).Infof("%q is unspecified, trying inCluster", Flag_Selfservicenamespace_Key)
+	selfServiceName := v.GetString(Flag_SelfServiceName_Key)
+	if selfServiceName == "" {
+		// TODO: try bootstraping by (only this podIP) -> Endpoint -> Service
+		return fmt.Errorf("%q can't be empty string", Flag_SelfServiceName_Key)
+	}
+	errs = kvalidation.NameIsDNSSubdomain(selfServiceName, false)
+	if len(errs) > 0 {
+		return fmt.Errorf("flag %q has invalid value: %s", Flag_SelfServiceName_Key, strings.Join(errs, ", "))
+	}
+
+	selfNamespace := v.GetString(Flag_SelfNamespace_Key)
+	if selfNamespace == "" {
+		glog.V(4).Infof("%q is unspecified, trying inCluster", Flag_SelfNamespace_Key)
 		selfServiceNamespaceBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 		if err != nil {
 			return fmt.Errorf("failed to detect selfServiceNamespace: %v", err)
 		}
-		selfServiceNamespace = (string)(selfServiceNamespaceBytes)
+		selfNamespace = (string)(selfServiceNamespaceBytes)
+	} else {
+		errs := kvalidation.NameIsDNSSubdomain(selfServiceName, false)
+		if len(errs) > 0 {
+			return fmt.Errorf("flag %q has invalid value: %s", Flag_SelfNamespace_Key, strings.Join(errs, ", "))
+		}
 	}
-
-	//accountSecret, err := kubeClientset.CoreV1().Secrets(selfServiceNamespace).Get()
 
 	routeInformer := routeinformersv1.NewRouteInformer(routeClientset, namespace, ResyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	glog.Infof("Starting Route informer")
@@ -178,7 +202,14 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 		return err
 	}
 
-	rc := routecontroller.NewRouteController(exposer, routeClientset, kubeClientset, routeInformer, secretInformer, selfServiceNamespace, selfServiceName)
+	// Wait secretInformer to sync so we can create acmeClientFactory
+	if !cache.WaitForCacheSync(stopCh, secretInformer.HasSynced) {
+		return fmt.Errorf("timed out waiting for secretInformer caches to sync")
+	}
+	secretLister := kcorelistersv1.NewSecretLister(secretInformer.GetIndexer())
+	acmeClientFactory := acmeclientbuilder.NewSharedClientFactory(acmeUrl, accountName, selfNamespace, kubeClientset, secretLister)
+
+	rc := routecontroller.NewRouteController(acmeClientFactory, exposer, routeClientset, kubeClientset, routeInformer, secretInformer, selfNamespace, selfServiceName)
 	go rc.Run(Workers, stopCh)
 
 	<-stopCh

@@ -35,29 +35,33 @@ type Client struct {
 	Account *acme.Account
 }
 
-func (c *Client) CreateAccount(ctx context.Context, a *acme.Account) (err error) {
+func (c *Client) CreateAccount(ctx context.Context, a *acme.Account) error {
+	var err error
 	c.Client.Key, err = rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
-		return
+		return err
 	}
 
 	c.Account, err = c.Client.Register(ctx, a, acceptTerms)
 	if err != nil {
-		return
+		return err
 	}
 
-	return
+	return nil
 }
 
 func (c *Client) DeactivateAccount(ctx context.Context, a *acme.Account) error {
 	return c.Client.RevokeAuthorization(ctx, a.URI)
 }
 
-// Consider if it needs to return acme.Authorization
-func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map[string]ChallengeExposer) (authorization *acme.Authorization, err error) {
-	authorization, err = c.Client.Authorize(ctx, domain)
+func (c *Client) Authorize(ctx context.Context, domain string, exposers map[string]ChallengeExposer) (*acme.Authorization, error) {
+
+}
+
+func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map[string]ChallengeExposer) (*acme.Authorization, error) {
+	authorization, err := c.Client.Authorize(ctx, domain)
 	if err != nil {
-		return
+		return nil, err
 	}
 	defer func() {
 		if err != nil && authorization != nil {
@@ -72,11 +76,11 @@ func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map
 	}()
 
 	if authorization.Status == acme.StatusValid {
-		return
+		return authorization, nil
 	}
 
 	// TODO: prefer faster combinations like http-01 before dns-01 with cost based estimation
-	glog.V(4).Infof("Authorization: %+v", authorization)
+	glog.V(4).Infof("Authorization: %#v", authorization)
 
 	found := false
 	for _, combination := range authorization.Combinations {
@@ -85,8 +89,7 @@ func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map
 		satisfiable := true
 		for _, challengeId := range combination {
 			if challengeId >= len(authorization.Challenges) {
-				err = errors.New("ACME authorization has returned an invalid combination")
-				return
+				return nil, errors.New("ACME authorization has returned an invalid combination")
 			}
 
 			if _, ok := exposers[authorization.Challenges[challengeId].Type]; !ok {
@@ -142,26 +145,23 @@ func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map
 			}
 		}
 		if err != nil {
-			glog.Error(err)
-			return
+			return nil, err
 		}
 
 		found = true
 		break
 	}
 	if !found {
-		err = errors.New("unable to satisfy all challenge combinations for ACME authorization")
-		return
+		return nil, errors.New("unable to satisfy all challenge combinations for ACME authorization")
 	}
 
 	// TODO: consider implementing a timeout in case something went wrong
 	authorization, err = c.Client.WaitAuthorization(ctx, authorization.URI)
 	if err != nil {
-		glog.Errorf("Authorization failed: %+v", err)
-		return
+		return nil, fmt.Errorf("authorization failed: %#v", err)
 	}
 
-	return
+	return authorization, nil
 }
 
 type FailedDomain struct {

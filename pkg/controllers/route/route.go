@@ -23,7 +23,10 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
+	"context"
+
 	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
+	acmeclientbuilder "github.com/tnozicka/openshift-acme/pkg/acme/client/builder"
 	"github.com/tnozicka/openshift-acme/pkg/api"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	routeutil "github.com/tnozicka/openshift-acme/pkg/route"
@@ -35,6 +38,7 @@ const (
 	MaxRetries               = 5
 	RenewalStandardDeviation = 1
 	RenewalMean              = 0
+	AcmeTimeout              = 10 * time.Second
 )
 
 var (
@@ -42,6 +46,8 @@ var (
 )
 
 type RouteController struct {
+	acmeClientFactory *acmeclientbuilder.SharedClientFactory
+
 	// TODO: switch this for generic interface to allow other types like DNS01
 	exposer *challengeexposers.Http01
 
@@ -72,6 +78,7 @@ type RouteController struct {
 }
 
 func NewRouteController(
+	acmeClientFactory *acmeclientbuilder.SharedClientFactory,
 	exposer *challengeexposers.Http01,
 	routeClientset routeclientset.Interface,
 	kubeClientset kubernetes.Interface,
@@ -85,6 +92,8 @@ func NewRouteController(
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeClientset.CoreV1().Events("")})
 
 	rc := &RouteController{
+		acmeClientFactory: acmeClientFactory,
+
 		exposer: exposer,
 
 		routeIndexer: routeInformer.GetIndexer(),
@@ -250,7 +259,7 @@ func (rc *RouteController) getState(t time.Time, route *routev1.Route) api.AcmeS
 	return api.AcmeStateOk
 }
 
-func (rc *RouteController) expose(route *routev1.Route) error {
+func (rc *RouteController) expose(route *routev1.Route, challengePath string) error {
 	// Name of the forwarding Service and Route
 	name := fmt.Sprintf("%s-%s", route.Name, api.ForwardingRouteSuffing)
 
@@ -302,23 +311,27 @@ func (rc *RouteController) expose(route *routev1.Route) error {
 				{
 					APIVersion:         route.APIVersion,
 					Kind:               route.Kind,
-					Name:               route.Name,
+					Name:               name,
 					UID:                route.UID,
 					Controller:         &true,
 					BlockOwnerDeletion: &true,
 				},
 			},
 		},
+		Spec: routev1.RouteSpec{
+			Host: route.Spec.Host,
+			Path: challengePath,
+		},
 	}
 
-	createR, err := rc.routeClientset.RouteV1().Routes(route.Namespace).Create(r)
+	_, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Create(r)
 	if err != nil {
 		if !kapierrors.IsAlreadyExists(err) {
 			return err
 		}
 
 		glog.Errorf("Forwarding Route %s/%s already exists, forcing rewrite")
-		r.ResourceVersion = createR.ResourceVersion
+		r.ResourceVersion = ""
 		_, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(r)
 	}
 
@@ -361,12 +374,22 @@ func (rc *RouteController) handle(key string) error {
 	switch state {
 	case api.AcmeStateNeedsCert:
 		// TODO: Add TTL based lock to allow only one domain to enter this stage
+
+		ctx, cancel := context.WithTimeout(context.Background(), AcmeTimeout)
+		defer cancel()
+
+		client, err := rc.acmeClientFactory.GetClient(ctx)
+		if err != nil {
+			return err
+		}
+
+		client.ObtainCertificate()
 		rc.exposer.Expose()
 		rc.expose(routeReadOnly)
 	case api.AcmeStateWaitingForAuthz:
 	case api.AcmeStateOk:
 	default:
-		return fmt.Errorf("Failed to determine state for Route: %#v", routeReadOnly)
+		return fmt.Errorf("failed to determine state for Route: %#v", routeReadOnly)
 	}
 
 	route := routeReadOnly.DeepCopy()

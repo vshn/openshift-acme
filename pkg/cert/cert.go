@@ -24,15 +24,10 @@ func NewCertificateFromDER(der [][]byte, privateKey *rsa.PrivateKey) (certificat
 	certificate = &CertPemData{}
 
 	certBuffer := bytes.NewBuffer([]byte{})
-	for i, cert := range der {
-		var c *x509.Certificate
-		c, err = x509.ParseCertificate(cert)
+	for _, cert := range der {
+		_, err = x509.ParseCertificate(cert)
 		if err != nil {
 			return
-		}
-
-		if i == 0 {
-			certificate.Certificate = c
 		}
 
 		pem.Encode(certBuffer, &pem.Block{Type: "CERTIFICATE", Bytes: cert})
