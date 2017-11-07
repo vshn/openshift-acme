@@ -9,6 +9,7 @@ import (
 	routev1 "github.com/openshift/api/route/v1"
 	routeclientset "github.com/openshift/client-go/route/clientset/versioned"
 	routelistersv1 "github.com/openshift/client-go/route/listers/route/v1"
+	"golang.org/x/crypto/acme"
 	corev1 "k8s.io/api/core/v1"
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -199,11 +200,12 @@ func (rc *RouteController) deleteRoute(obj interface{}) {
 }
 
 // TODO: extract this function to be re-used by ingress controller
+// FIXME: needs expectation protection
 func (rc *RouteController) getState(t time.Time, route *routev1.Route) api.AcmeState {
 	if route.Annotations != nil {
 		_, ok := route.Annotations[api.AcmeAwaitingAuthzUrlAnnotation]
 		if ok {
-			return api.AcmeAwaitingAuthzUrlAnnotation
+			return api.AcmeStateWaitingForAuthz
 		}
 	}
 
@@ -366,11 +368,13 @@ func (rc *RouteController) handle(key string) error {
 
 	// We have to check if Route is admitted to be sure it owns the domain!
 	if !routeutil.IsAdmitted(routeReadOnly) {
-		glog.V(4).Infof("Skipping Route %s/%s because it's not admitted", key)
+		glog.V(4).Infof("Skipping Route %s because it's not admitted", key)
 		return nil
 	}
 
 	state := rc.getState(startTime, routeReadOnly)
+	// FIXME: this state machine needs protection with expectations
+	// (informers may not be synced yet with recent state transition updates)
 	switch state {
 	case api.AcmeStateNeedsCert:
 		// TODO: Add TTL based lock to allow only one domain to enter this stage
@@ -383,10 +387,68 @@ func (rc *RouteController) handle(key string) error {
 			return err
 		}
 
-		client.ObtainCertificate()
-		rc.exposer.Expose()
-		rc.expose(routeReadOnly)
+		// FIXME: definitely protect with expectations
+		authorization, err := client.Client.Authorize(ctx, routeReadOnly.Spec.Host)
+		if err != nil {
+			return err
+		}
+		glog.V(4).Infof("Created authorization %q for Route %s", authorization.URI, key)
+
+		if authorization.Status == acme.StatusValid {
+			glog.V(4).Infof("Authorization %q for Route %s is already valid", authorization.URI, key)
+		}
+
+		route := routeReadOnly.DeepCopy()
+		if route.Annotations == nil {
+			route.Annotations = make(map[string]string)
+		}
+		route.Annotations[api.AcmeAwaitingAuthzUrlAnnotation] = authorization.URI
+		_, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(route)
+		if err != nil {
+			glog.Errorf("Failed to update Route %s: %v. Revoking authorization %q so it won't stay pending.", key, err, authorization.URI)
+			// We need to try to cancel the authorization so we don't leave pending authorization behind and get rate limited
+			acmeErr := client.Client.RevokeAuthorization(ctx, authorization.URI)
+			if acmeErr != nil {
+				glog.Errorf("Failed to revoke authorization %q: %v", acmeErr)
+			}
+
+			return err
+		}
+
+		return nil
+
 	case api.AcmeStateWaitingForAuthz:
+		ctx, cancel := context.WithTimeout(context.Background(), AcmeTimeout)
+		defer cancel()
+
+		client, err := rc.acmeClientFactory.GetClient(ctx)
+		if err != nil {
+			return err
+		}
+
+		authorizationUri := routeReadOnly.Annotations[api.AcmeAwaitingAuthzUrlAnnotation]
+		authorization, err := client.Client.GetAuthorization(ctx, authorizationUri)
+		if err != nil {
+			return err
+		}
+
+		switch authorization.Status {
+		case acme.StatusPending:
+			// FIXME: add PreExpose and PostExpose customization methods to Http01 exposer and register them when creating this controller
+			rc.expose()
+			client.AcceptAuthorization(ctx, authorization, rc.exposer)
+		case acme.StatusProcessing:
+		case acme.StatusInvalid:
+		case acme.StatusRevoked:
+		case acme.StatusValid:
+			glog.V(4).Infof("Authorization %q for Route %s successfully validated", authorization.URI, key)
+			// provision cert
+
+		default:
+			return fmt.Errorf("unknow authorization status %s", authorization.Status)
+		}
+
+		rc.expose(routeReadOnly)
 	case api.AcmeStateOk:
 	default:
 		return fmt.Errorf("failed to determine state for Route: %#v", routeReadOnly)

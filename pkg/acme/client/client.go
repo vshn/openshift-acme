@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/golang/glog"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
@@ -54,111 +53,68 @@ func (c *Client) DeactivateAccount(ctx context.Context, a *acme.Account) error {
 	return c.Client.RevokeAuthorization(ctx, a.URI)
 }
 
-func (c *Client) Authorize(ctx context.Context, domain string, exposers map[string]ChallengeExposer) (*acme.Authorization, error) {
+func getStatisfiableCombinations(authorization *acme.Authorization, exposers map[string]ChallengeExposer) [][]int {
+	combinations := [][]int{}
 
-}
-
-func (c *Client) ValidateDomain(ctx context.Context, domain string, exposers map[string]ChallengeExposer) (*acme.Authorization, error) {
-	authorization, err := c.Client.Authorize(ctx, domain)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil && authorization != nil {
-			glog.V(4).Infof("Revoking authorization '%s' for domain '%s'", authorization, domain)
-			// We can't use the default context because this call has to be done even if ctx is done (canceling)
-			shortCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			if e := c.Client.RevokeAuthorization(shortCtx, domain); e != nil {
-				err = fmt.Errorf("%v (+Revoking failed authorization crashed because: %v)", err, e)
-			}
-		}
-	}()
-
-	if authorization.Status == acme.StatusValid {
-		return authorization, nil
-	}
-
-	// TODO: prefer faster combinations like http-01 before dns-01 with cost based estimation
-	glog.V(4).Infof("Authorization: %#v", authorization)
-
-	found := false
 	for _, combination := range authorization.Combinations {
-		// We have to check if we support all the challenges in this combination otherwise it's pointless to start
-		// validating some of them and then find out later than some can't be satisfied
 		satisfiable := true
 		for _, challengeId := range combination {
 			if challengeId >= len(authorization.Challenges) {
-				return nil, errors.New("ACME authorization has returned an invalid combination")
+				glog.Warning("ACME authorization has contains challengeId %d out of range; %#v", challengeId, authorization)
+				satisfiable = false
+				continue
 			}
 
 			if _, ok := exposers[authorization.Challenges[challengeId].Type]; !ok {
 				satisfiable = false
+				continue
 			}
 		}
-		if !satisfiable {
-			continue
+
+		if satisfiable {
+			combinations = append(combinations, combination)
+		}
+	}
+
+	return combinations
+}
+
+func (c *Client) AcceptAuthorization(ctx context.Context, authorization *acme.Authorization, exposers map[string]ChallengeExposer) (*acme.Authorization, error) {
+	glog.V(4).Infof("Found %d possible combinations for authorization", len(authorization.Combinations))
+
+	combinations := getStatisfiableCombinations(authorization, exposers)
+	if len(combinations) == 0 {
+		return nil, fmt.Errorf("none of %d combination could be satified", len(authorization.Combinations))
+	}
+
+	glog.V(4).Infof("Found %d valid combinations for authorization", len(combinations))
+
+	// TODO: sort combinations by preference
+
+	// TODO: consider using the remaining combinations if this one fails
+	combination := combinations[0]
+	for _, challengeId := range combination {
+		challenge := authorization.Challenges[challengeId]
+
+		exposer, ok := exposers[challenge.Type]
+		if !ok {
+			return nil, errors.New("internal error: unavailable exposer")
 		}
 
-		combLength := len(combination)
-		if combLength > 10 {
-			combLength = 10
-		}
-		errCh := make(chan error, combLength)
-		for _, challengeId := range combination {
-			// challengeId is already verified to be in range from previous cycle
-
-			go func(chal *acme.Challenge) {
-				var err error
-				defer func() { errCh <- err }()
-				exposer, ok := exposers[chal.Type]
-				if !ok {
-					err = errors.New("internal error: unavailable exposer")
-					return
-				}
-
-				err = exposer.Expose(c.Client, domain, chal.Token)
-				if err != nil {
-					return
-				}
-
-				chal, err = c.Client.Accept(ctx, chal)
-				if err != nil {
-					return
-				}
-			}(authorization.Challenges[challengeId])
-		}
-
-		err = nil
-		for _, challengeId := range combination {
-			e := <-errCh
-			if e != nil {
-				if err == nil {
-					err = e
-				} else {
-					err = fmt.Errorf("%v: %v", err, e)
-				}
-			} else {
-				chal := authorization.Challenges[challengeId]
-				// we already checked above if we have exposer available
-				defer exposers[chal.Type].Remove(c.Client, domain, chal.Token)
-			}
-		}
+		err = exposer.Expose(c.Client, domain, challenge.Token)
 		if err != nil {
 			return nil, err
 		}
 
-		found = true
-		break
-	}
-	if !found {
-		return nil, errors.New("unable to satisfy all challenge combinations for ACME authorization")
+		challenge, err = c.Client.Accept(ctx, challenge)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// TODO: consider implementing a timeout in case something went wrong
-	authorization, err = c.Client.WaitAuthorization(ctx, authorization.URI)
+	authorization, err = c.Client.GetAuthorization(ctx, authorization.URI)
 	if err != nil {
-		return nil, fmt.Errorf("authorization failed: %#v", err)
+		return nil, err
 	}
 
 	return authorization, nil
