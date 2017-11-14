@@ -1,7 +1,7 @@
 package api
 
 const (
-	ForwardingRouteSuffing = "acme_forwarder"
+	ForwardingRouteSuffing = "acme-forwarder"
 )
 
 type AcmeState string

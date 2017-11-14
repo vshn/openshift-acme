@@ -24,29 +24,7 @@ type Http01 struct {
 	Addr    string
 }
 
-func (h *Http01) getKey(url string) (key string, found bool) {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-
-	key, found = h.mapping[url]
-	return
-}
-
-func (h *Http01) handler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
-
-	uri := strings.Split(r.Host, ":")[0] + r.URL.String()
-	key, found := h.getKey(uri)
-	glog.V(4).Infof("url = '%s'; found = '%t'", uri, found)
-	if found {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, key)
-		return
-	}
-
-	w.WriteHeader(http.StatusNotFound)
-	return
-}
+var _ Interface = &Http01{}
 
 func NewHttp01(ctx context.Context, addr string) (*Http01, error) {
 	s := &Http01{
@@ -81,12 +59,35 @@ func NewHttp01(ctx context.Context, addr string) (*Http01, error) {
 	return s, nil
 }
 
-func getHttp01Uri(a *acme.Client, domain string, token string) (url string) {
-	url = domain + a.HTTP01ChallengePath(token)
+func (h *Http01) getKey(url string) (string, bool) {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	key, found := h.mapping[url]
+	return key, found
+}
+
+func (h *Http01) handler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+
+	uri := strings.Split(r.Host, ":")[0] + r.URL.String()
+	key, found := h.getKey(uri)
+	glog.V(4).Infof("url = '%s'; found = '%t'", uri, found)
+	if found {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, key)
+		return
+	}
+
+	w.WriteHeader(http.StatusNotFound)
 	return
 }
 
-func (h *Http01) Expose(a *acme.Client, domain string, token string) (err error) {
+func getHttp01Uri(a *acme.Client, domain string, token string) string {
+	return domain + a.HTTP01ChallengePath(token)
+}
+
+func (h *Http01) Expose(a *acme.Client, domain string, token string) error {
 	if domain == "" {
 		return errors.New("domain can't be empty")
 	}
@@ -94,7 +95,7 @@ func (h *Http01) Expose(a *acme.Client, domain string, token string) (err error)
 	url := getHttp01Uri(a, domain, token)
 	key, err := a.HTTP01ChallengeResponse(token)
 	if err != nil {
-		return
+		return err
 	}
 
 	h.mutex.Lock()
@@ -102,7 +103,7 @@ func (h *Http01) Expose(a *acme.Client, domain string, token string) (err error)
 	// TODO: consider checking if there is already a value with same key
 	h.mapping[url] = key
 
-	return
+	return nil
 }
 
 func (h *Http01) Remove(a *acme.Client, domain string, token string) error {

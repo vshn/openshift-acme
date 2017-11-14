@@ -1,6 +1,11 @@
 package route
 
 import (
+	"context"
+	cryptorand "crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"fmt"
 	"math/rand"
 	"time"
@@ -8,11 +13,10 @@ import (
 	"github.com/golang/glog"
 	routev1 "github.com/openshift/api/route/v1"
 	routeclientset "github.com/openshift/client-go/route/clientset/versioned"
+	_ "github.com/openshift/client-go/route/clientset/versioned/scheme"
 	routelistersv1 "github.com/openshift/client-go/route/listers/route/v1"
 	"golang.org/x/crypto/acme"
 	corev1 "k8s.io/api/core/v1"
-	kapierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -24,9 +28,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
-	"context"
-
 	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
+	acmeclient "github.com/tnozicka/openshift-acme/pkg/acme/client"
 	acmeclientbuilder "github.com/tnozicka/openshift-acme/pkg/acme/client/builder"
 	"github.com/tnozicka/openshift-acme/pkg/api"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
@@ -36,7 +39,7 @@ import (
 
 const (
 	ControllerName           = "openshift-acme-controller"
-	MaxRetries               = 5
+	MaxRetries               = 1
 	RenewalStandardDeviation = 1
 	RenewalMean              = 0
 	AcmeTimeout              = 10 * time.Second
@@ -50,7 +53,7 @@ type RouteController struct {
 	acmeClientFactory *acmeclientbuilder.SharedClientFactory
 
 	// TODO: switch this for generic interface to allow other types like DNS01
-	exposer *challengeexposers.Http01
+	exposers map[string]challengeexposers.Interface
 
 	routeIndexer cache.Indexer
 
@@ -71,21 +74,23 @@ type RouteController struct {
 	// Added as a member to the struct to allow injection for testing.
 	secretInformerSynced cache.InformerSynced
 
-	eventRecorder record.EventRecorder
+	recorder record.EventRecorder
 
 	queue workqueue.RateLimitingInterface
 
-	selfServiceNamespace, selfServiceName string
+	//selfServiceNamespace, selfServiceName string
+	exposerIP string
 }
 
 func NewRouteController(
 	acmeClientFactory *acmeclientbuilder.SharedClientFactory,
-	exposer *challengeexposers.Http01,
+	exposers map[string]challengeexposers.Interface,
 	routeClientset routeclientset.Interface,
 	kubeClientset kubernetes.Interface,
 	routeInformer cache.SharedIndexInformer,
 	secretInformer cache.SharedIndexInformer,
-	selfServiceNamespace, selfServiceName string,
+	exposerIP string,
+	//selfServiceNamespace, selfServiceName string,
 ) *RouteController {
 
 	eventBroadcaster := record.NewBroadcaster()
@@ -95,7 +100,7 @@ func NewRouteController(
 	rc := &RouteController{
 		acmeClientFactory: acmeClientFactory,
 
-		exposer: exposer,
+		exposers: exposers,
 
 		routeIndexer: routeInformer.GetIndexer(),
 
@@ -111,12 +116,13 @@ func NewRouteController(
 		routeInformerSynced:  routeInformer.HasSynced,
 		secretInformerSynced: secretInformer.HasSynced,
 
-		eventRecorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: ControllerName}),
+		recorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: ControllerName}),
 
 		queue: workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 
-		selfServiceNamespace: selfServiceNamespace,
-		selfServiceName:      selfServiceName,
+		//selfServiceNamespace: selfServiceNamespace,
+		//selfServiceName:      selfServiceName,
+		exposerIP: exposerIP,
 	}
 
 	routeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -261,83 +267,19 @@ func (rc *RouteController) getState(t time.Time, route *routev1.Route) api.AcmeS
 	return api.AcmeStateOk
 }
 
-func (rc *RouteController) expose(route *routev1.Route, challengePath string) error {
-	// Name of the forwarding Service and Route
-	name := fmt.Sprintf("%s-%s", route.Name, api.ForwardingRouteSuffing)
+func (rc *RouteController) wrapExposers(exposers map[string]challengeexposers.Interface, route *routev1.Route) map[string]challengeexposers.Interface {
+	wrapped := make(map[string]challengeexposers.Interface)
 
-	true := true
-	// Forwarding Route and Service share ObjectMeta
-	meta := metav1.ObjectMeta{
-		Name: name,
-		OwnerReferences: []metav1.OwnerReference{
-			{
-				APIVersion:         route.APIVersion,
-				Kind:               route.Kind,
-				Name:               route.Name,
-				UID:                route.UID,
-				Controller:         &true,
-				BlockOwnerDeletion: &true,
-			},
-		},
-	}
-
-	// Route can only point to a Service in the same namespace
-	// but we need to redirect ACME challenge to the ACME service
-	// usually deployed in a different namespace.
-	// We avoid this limitation by creating a forwarding service.
-	// Note that this requires working DNS in your cluster.
-	s := &corev1.Service{
-		ObjectMeta: meta,
-		Spec: corev1.ServiceSpec{
-			Type: corev1.ServiceTypeExternalName,
-			// TODO: Autodetect cluster suffix or fix Kubernetes to correctly resolve cluster QDN instead of FQDN only
-			ExternalName: fmt.Sprintf("%s.%s.svc.cluster.local.", rc.selfServiceName, rc.selfServiceNamespace),
-		},
-	}
-	createS, err := rc.kubeClientset.CoreV1().Services(route.Namespace).Create(s)
-	if err != nil {
-		if !kapierrors.IsAlreadyExists(err) {
-			return err
+	for k, v := range exposers {
+		if k == "http-01" {
+			//wrapped[k] = NewExposer(v, rc.routeClientset, rc.kubeClientset, route, rc.selfServiceName, rc.selfServiceNamespace)
+			wrapped[k] = NewExposer(v, rc.routeClientset, rc.kubeClientset, route, rc.exposerIP)
+		} else {
+			wrapped[k] = v
 		}
-
-		glog.Errorf("Forwarding Service %s/%s already exists, forcing rewrite")
-		s.ResourceVersion = createS.ResourceVersion
-		_, err = rc.kubeClientset.CoreV1().Services(route.Namespace).Update(s)
 	}
 
-	// Create Route to accept the traffic for ACME challenge
-	r := &routev1.Route{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         route.APIVersion,
-					Kind:               route.Kind,
-					Name:               name,
-					UID:                route.UID,
-					Controller:         &true,
-					BlockOwnerDeletion: &true,
-				},
-			},
-		},
-		Spec: routev1.RouteSpec{
-			Host: route.Spec.Host,
-			Path: challengePath,
-		},
-	}
-
-	_, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Create(r)
-	if err != nil {
-		if !kapierrors.IsAlreadyExists(err) {
-			return err
-		}
-
-		glog.Errorf("Forwarding Route %s/%s already exists, forcing rewrite")
-		r.ResourceVersion = ""
-		_, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(r)
-	}
-
-	return nil
+	return wrapped
 }
 
 // handle is the business logic of the controller.
@@ -366,9 +308,21 @@ func (rc *RouteController) handle(key string) error {
 	// Deep copy to avoid mutating the cache
 	routeReadOnly := objReadOnly.(*routev1.Route)
 
+	// Don't act on objects that are being deleted
+	if routeReadOnly.DeletionTimestamp != nil {
+		return nil
+	}
+
 	// We have to check if Route is admitted to be sure it owns the domain!
 	if !routeutil.IsAdmitted(routeReadOnly) {
 		glog.V(4).Infof("Skipping Route %s because it's not admitted", key)
+		return nil
+	}
+
+	if routeReadOnly.Annotations[api.TlsAcmePausedAnnotation] == "true" {
+		glog.V(4).Infof("Skipping Route %s because it is paused", key)
+
+		// TODO: reconcile (e.g. related secrets)
 		return nil
 	}
 
@@ -428,35 +382,120 @@ func (rc *RouteController) handle(key string) error {
 
 		authorizationUri := routeReadOnly.Annotations[api.AcmeAwaitingAuthzUrlAnnotation]
 		authorization, err := client.Client.GetAuthorization(ctx, authorizationUri)
+		// TODO: emit an event but don't fail as user can set it
 		if err != nil {
 			return err
 		}
 
+		glog.V(4).Infof("Route %q: authorization state is %q", key, authorization.Status)
+
 		switch authorization.Status {
 		case acme.StatusPending:
-			// FIXME: add PreExpose and PostExpose customization methods to Http01 exposer and register them when creating this controller
-			rc.expose()
-			client.AcceptAuthorization(ctx, authorization, rc.exposer)
-		case acme.StatusProcessing:
-		case acme.StatusInvalid:
-		case acme.StatusRevoked:
+			exposers := rc.wrapExposers(rc.exposers, routeReadOnly)
+			authorization, err := client.AcceptAuthorization(ctx, authorization, routeReadOnly.Spec.Host, exposers)
+			if err != nil {
+				return err
+			}
+
+			if authorization.Status == acme.StatusPending {
+				glog.V(4).Infof("Re-queuing Route %q due to pending authorization", key)
+
+				// TODO: get this value from authorization when this is fixed
+				// https://github.com/golang/go/issues/22457
+				retryAfter := 5 * time.Second
+				rc.queue.AddAfter(key, retryAfter)
+
+				// Don't count this as requeue, reset counter
+				rc.queue.Forget(key)
+
+				return nil
+			}
+
+			if authorization.Status != acme.StatusValid {
+				return fmt.Errorf("route %q - authorization has transitioned to unexpected state %q", key, authorization.Status)
+			}
+
+			fallthrough
+
 		case acme.StatusValid:
 			glog.V(4).Infof("Authorization %q for Route %s successfully validated", authorization.URI, key)
 			// provision cert
+			template := x509.CertificateRequest{
+				Subject: pkix.Name{
+					CommonName: routeReadOnly.Spec.Host,
+				},
+			}
+			template.DNSNames = append(template.DNSNames, routeReadOnly.Spec.Host)
+			privateKey, err := rsa.GenerateKey(cryptorand.Reader, 4096)
+			if err != nil {
+				return err
+			}
 
+			csr, err := x509.CreateCertificateRequest(cryptorand.Reader, &template, privateKey)
+			if err != nil {
+				return err
+			}
+
+			// TODO: protect with expectations
+			// TODO: aks to split CreateCert func in acme library to avoid embedded pooling
+			der, certUrl, err := client.Client.CreateCert(ctx, csr, 0, true)
+			if err != nil {
+				return err
+			}
+			glog.V(4).Infof("Route %q - created certificate available at %s", key, certUrl)
+
+			certPemData, err := cert.NewCertificateFromDER(der, privateKey)
+			if err != nil {
+				return err
+			}
+
+			route := routeReadOnly.DeepCopy()
+			if route.Spec.TLS == nil {
+				route.Spec.TLS = &routev1.TLSConfig{
+					// Defaults
+					InsecureEdgeTerminationPolicy: "Redirect",
+					Termination:                   routev1.TLSTerminationEdge,
+				}
+			}
+			route.Spec.TLS.Key = string(certPemData.Key)
+			route.Spec.TLS.Certificate = string(certPemData.Crt)
+
+			delete(route.Annotations, api.AcmeAwaitingAuthzUrlAnnotation)
+
+			route, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(route)
+			if err != nil {
+				return err
+			}
+
+			rc.recorder.Event(route, corev1.EventTypeNormal, "AcmeCertificateProvisioned", "Successfully provided new certificate")
+
+		case acme.StatusInvalid:
+			rc.recorder.Eventf(routeReadOnly, corev1.EventTypeWarning, "AcmeFailedAuthorization", "Acme provider failed to validate domain %q: %s", routeReadOnly.Spec.Host, acmeclient.GetAuthorizationErrors(authorization))
+
+			route := routeReadOnly.DeepCopy()
+			delete(route.Annotations, api.AcmeAwaitingAuthzUrlAnnotation)
+			// TODO: remove force pausing when we have ACME rate limiter
+			route.Annotations[api.TlsAcmePausedAnnotation] = "true"
+			route, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(route)
+			if err != nil {
+				return err
+			}
+
+		case acme.StatusRevoked:
+			rc.recorder.Eventf(routeReadOnly, corev1.EventTypeWarning, "AcmeRevokedAuthorization", "Acme authorization has been revoked for domain %q: %s", routeReadOnly.Spec.Host, acmeclient.GetAuthorizationErrors(authorization))
+
+		case acme.StatusProcessing:
+			fallthrough
 		default:
 			return fmt.Errorf("unknow authorization status %s", authorization.Status)
 		}
 
-		rc.expose(routeReadOnly)
 	case api.AcmeStateOk:
 	default:
 		return fmt.Errorf("failed to determine state for Route: %#v", routeReadOnly)
 	}
 
-	route := routeReadOnly.DeepCopy()
-
-	glog.Infof("%v", route)
+	// TODO: reconcile (e.g. related secrets)
 
 	return nil
 }
