@@ -1,0 +1,45 @@
+kind: Role
+metadata:
+  name: acme-controller
+rules:
+- apiGroups:
+  - "route.openshift.io"
+  resources:
+  - routes
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+
+- apiGroups:
+  - "route.openshift.io"
+  resources:
+  - routes/custom-host
+  verbs:
+  - create
+
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  - services
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete

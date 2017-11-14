@@ -10,8 +10,9 @@ import (
 	"sync"
 
 	"github.com/golang/glog"
-	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
 	"golang.org/x/crypto/acme"
+
+	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
 )
 
 var once sync.Once
@@ -49,8 +50,7 @@ func (c *Client) DeactivateAccount(ctx context.Context, a *acme.Account) error {
 }
 
 func getStatisfiableCombinations(authorization *acme.Authorization, exposers map[string]challengeexposers.Interface) [][]int {
-	combinations := [][]int{}
-
+	var combinations [][]int
 	for _, combination := range authorization.Combinations {
 		satisfiable := true
 		for _, challengeId := range combination {

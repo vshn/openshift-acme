@@ -33,14 +33,14 @@ import (
 )
 
 const (
-	DefaultLoglevel     = 0
-	Flag_LogLevel_Key   = "loglevel"
-	Flag_Kubeconfig_Key = "kubeconfig"
-	Flag_Listen_Key     = "listen"
-	Flag_Acmeurl_Key    = "acmeurl"
-	//Flag_SelfServiceName_Key = "selfservicename"
+	DefaultLoglevel        = 0
+	Flag_LogLevel_Key      = "loglevel"
+	Flag_Kubeconfig_Key    = "kubeconfig"
+	Flag_Acmeurl_Key       = "acmeurl"
 	Flag_SelfNamespace_Key = "selfnamespace"
 	Flag_ExposerIP         = "exposer-ip"
+	Flag_ExposerPort       = "exposer-port"
+	Flag_ExposerListenIP   = "exposer-listen-ip"
 	Flag_Namespace_Key     = "namespace"
 	Flag_AccountName_Key   = "account-name"
 	ResyncPeriod           = 10 * time.Minute
@@ -69,11 +69,11 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// We have to bind Viper in Run because there is only one instance to avoid collisions
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Kubeconfig_Key)
-			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Listen_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Acmeurl_Key)
-			//cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_SelfServiceName_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_SelfNamespace_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_ExposerIP)
+			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_ExposerPort)
+			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_ExposerListenIP)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Namespace_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_AccountName_Key)
 
@@ -83,14 +83,13 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 		SilenceUsage:  true,
 	}
 
-	//rootCmd.PersistentFlags().Int8P(Flag_LogLevel_Key, "", 8, "Set loglevel")
 	rootCmd.PersistentFlags().StringP(Flag_Kubeconfig_Key, "", "", "Absolute path to the kubeconfig file")
-	rootCmd.PersistentFlags().StringP(Flag_Listen_Key, "", "0.0.0.0:5000", "Listen address for http-01 server")
 	rootCmd.PersistentFlags().StringP(Flag_Acmeurl_Key, "", "https://acme-staging.api.letsencrypt.org/directory", "ACME URL like https://acme-v01.api.letsencrypt.org/directory")
 	rootCmd.PersistentFlags().StringP(Flag_Namespace_Key, "n", "", "Restricts controller to namespace. If not specified controller watches all namespaces.")
 	rootCmd.PersistentFlags().StringP(Flag_AccountName_Key, "", "acme-account", "Name of the Secret holding ACME account.")
 	rootCmd.PersistentFlags().StringP(Flag_ExposerIP, "", "", "IP address on which this controller can be reached inside the cluster.")
-	//rootCmd.PersistentFlags().StringP(Flag_SelfServiceName_Key, "", "acme-controller", "Name of the service pointing to a pod with this program.")
+	rootCmd.PersistentFlags().Int32P(Flag_ExposerPort, "", 5000, "Port for http-01 server")
+	rootCmd.PersistentFlags().StringP(Flag_ExposerListenIP, "", "0.0.0.0", "Listen address for http-01 server")
 	rootCmd.PersistentFlags().StringP(Flag_SelfNamespace_Key, "", "", "Namespace where this controller and associated objects are deployed to. Defaults to current namespace if this program is running inside of the cluster.")
 
 	from := flag.CommandLine
@@ -129,6 +128,7 @@ func getClientConfig(kubeConfigPath string) *restclient.Config {
 }
 
 func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
+	// Register OpenShift groups to kubernetes Scheme
 	routescheme.AddToScheme(scheme.Scheme)
 
 	stopCh := signals.StopChannel()
@@ -173,16 +173,6 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 		return fmt.Errorf("flag %q has invalid value: %s", Flag_AccountName_Key, strings.Join(errs, ", "))
 	}
 
-	//selfServiceName := v.GetString(Flag_SelfServiceName_Key)
-	//if selfServiceName == "" {
-	//	// TODO: try bootstraping by (only this podIP) -> Endpoint -> Service
-	//	return fmt.Errorf("%q can't be empty string", Flag_SelfServiceName_Key)
-	//}
-	//errs = kvalidation.NameIsDNSSubdomain(selfServiceName, false)
-	//if len(errs) > 0 {
-	//	return fmt.Errorf("flag %q has invalid value: %s", Flag_SelfServiceName_Key, strings.Join(errs, ", "))
-	//}
-
 	selfNamespace := v.GetString(Flag_SelfNamespace_Key)
 	if selfNamespace == "" {
 		glog.V(4).Infof("%q is unspecified, trying inCluster", Flag_SelfNamespace_Key)
@@ -208,6 +198,22 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 		}
 	}
 
+	exposerPort := v.GetInt(Flag_ExposerPort)
+	errs = kvalidationutil.IsValidPortNum(exposerPort)
+	if len(errs) > 0 {
+		return fmt.Errorf("flag %q has invalid value: %s", Flag_ExposerPort, strings.Join(errs, ", "))
+	}
+
+	exposerListenIP := v.GetString(Flag_ExposerListenIP)
+	if exposerListenIP == "" {
+		return fmt.Errorf("%q can't be empty string", Flag_ExposerListenIP)
+	} else {
+		errs := kvalidationutil.IsValidIP(exposerListenIP)
+		if len(errs) > 0 {
+			return fmt.Errorf("flag %q has invalid value: %s", Flag_ExposerListenIP, strings.Join(errs, ", "))
+		}
+	}
+
 	routeInformer := routeinformersv1.NewRouteInformer(routeClientset, namespace, ResyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	glog.Infof("Starting Route informer")
 	go routeInformer.Run(stopCh)
@@ -216,7 +222,9 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	glog.Infof("Starting Secret informer")
 	go secretInformer.Run(stopCh)
 
-	http01, err := challengeexposers.NewHttp01(ctx, v.GetString(Flag_Listen_Key))
+	listenAddr := fmt.Sprintf("%s:%d", exposerListenIP, exposerPort)
+	glog.Infof("Exposer listen address is %q", listenAddr)
+	http01, err := challengeexposers.NewHttp01(ctx, listenAddr)
 	if err != nil {
 		return err
 	}
@@ -232,7 +240,7 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	secretLister := kcorelistersv1.NewSecretLister(secretInformer.GetIndexer())
 	acmeClientFactory := acmeclientbuilder.NewSharedClientFactory(acmeUrl, accountName, selfNamespace, kubeClientset, secretLister)
 
-	rc := routecontroller.NewRouteController(acmeClientFactory, exposers, routeClientset, kubeClientset, routeInformer, secretInformer, exposerIP)
+	rc := routecontroller.NewRouteController(acmeClientFactory, exposers, routeClientset, kubeClientset, routeInformer, secretInformer, exposerIP, int32(exposerPort))
 	go rc.Run(Workers, stopCh)
 
 	<-stopCh

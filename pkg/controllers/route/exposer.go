@@ -28,8 +28,7 @@ type Exposer struct {
 	routeClientset    routeclientset.Interface
 	kubeClientset     kubernetes.Interface
 	exposerIP         string
-	//selfServiceName      string
-	//selfServiceNamespace string
+	exposerPort       int32
 
 	route *routev1.Route
 }
@@ -41,16 +40,14 @@ func NewExposer(underlyingExposer challengeexposers.Interface,
 	kubeClientset kubernetes.Interface,
 	route *routev1.Route,
 	exposerIP string,
-	//selfServiceName string,
-	//selfServiceNamespace string,
+	exposerPort int32,
 ) *Exposer {
 	return &Exposer{
 		underlyingExposer: underlyingExposer,
 		routeClientset:    routeClientset,
 		kubeClientset:     kubeClientset,
 		exposerIP:         exposerIP,
-		//selfServiceName:      selfServiceName,
-		//selfServiceNamespace: selfServiceNamespace,
+		exposerPort:       exposerPort,
 
 		route: route,
 	}
@@ -90,9 +87,6 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 		Spec: corev1.ServiceSpec{
 			Type:      corev1.ServiceTypeClusterIP,
 			ClusterIP: "None",
-			//Type: corev1.ServiceTypeExternalName,
-			//// TODO: Autodetect cluster suffix or fix Kubernetes to correctly resolve cluster QDN instead of FQDN only
-			//ExternalName: fmt.Sprintf("%s.%s.svc.cluster.local", e.selfServiceName, e.selfServiceNamespace),
 		},
 	}
 	createdService, err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Create(service)
@@ -143,8 +137,7 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 					{
 						Name: "http",
 						// Port that the controller http-01 exposer listens on
-						// TODO: load this value from flag (part of the listen addr)
-						Port:     5000,
+						Port:     e.exposerPort,
 						Protocol: corev1.ProtocolTCP,
 					},
 				},

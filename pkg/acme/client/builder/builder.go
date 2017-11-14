@@ -19,6 +19,7 @@ import (
 	acmeclient "github.com/tnozicka/openshift-acme/pkg/acme/client"
 )
 
+// TODO: consider moving constants into common package
 const (
 	DataAcmeAccountUrlKey          = "acme.account-url"
 	DataAcmeAccountDirectoryUrlKey = "acme.account-created-at-directory-url"
@@ -83,7 +84,6 @@ func SecretFromClient(client *acmeclient.Client) (*corev1.Secret, error) {
 		Data: map[string][]byte{
 			DataAcmeAccountUrlKey: []byte(client.Account.URI),
 			DataTlslKey:           keyPem,
-			//DataAcmeAccountDirectoryUrlKey: client
 		},
 	}
 

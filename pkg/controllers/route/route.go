@@ -78,8 +78,8 @@ type RouteController struct {
 
 	queue workqueue.RateLimitingInterface
 
-	//selfServiceNamespace, selfServiceName string
-	exposerIP string
+	exposerIP   string
+	exposerPort int32
 }
 
 func NewRouteController(
@@ -90,7 +90,7 @@ func NewRouteController(
 	routeInformer cache.SharedIndexInformer,
 	secretInformer cache.SharedIndexInformer,
 	exposerIP string,
-	//selfServiceNamespace, selfServiceName string,
+	exposerPort int32,
 ) *RouteController {
 
 	eventBroadcaster := record.NewBroadcaster()
@@ -120,9 +120,8 @@ func NewRouteController(
 
 		queue: workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 
-		//selfServiceNamespace: selfServiceNamespace,
-		//selfServiceName:      selfServiceName,
-		exposerIP: exposerIP,
+		exposerIP:   exposerIP,
+		exposerPort: exposerPort,
 	}
 
 	routeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -215,7 +214,7 @@ func (rc *RouteController) getState(t time.Time, route *routev1.Route) api.AcmeS
 		}
 	}
 
-	if route.Spec.TLS == nil {
+	if route.Spec.TLS == nil || route.Spec.TLS.Key == "" || route.Spec.TLS.Certificate == "" {
 		return api.AcmeStateNeedsCert
 	}
 
@@ -273,7 +272,7 @@ func (rc *RouteController) wrapExposers(exposers map[string]challengeexposers.In
 	for k, v := range exposers {
 		if k == "http-01" {
 			//wrapped[k] = NewExposer(v, rc.routeClientset, rc.kubeClientset, route, rc.selfServiceName, rc.selfServiceNamespace)
-			wrapped[k] = NewExposer(v, rc.routeClientset, rc.kubeClientset, route, rc.exposerIP)
+			wrapped[k] = NewExposer(v, rc.routeClientset, rc.kubeClientset, route, rc.exposerIP, rc.exposerPort)
 		} else {
 			wrapped[k] = v
 		}

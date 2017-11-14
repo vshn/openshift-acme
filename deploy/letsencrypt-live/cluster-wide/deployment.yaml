@@ -1,0 +1,35 @@
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: acme-controller
+  labels:
+    app: acme-controller
+  annotations:
+    image.alpha.openshift.io/triggers: |-
+      [
+        {"from":{"kind":"ImageStreamTag","name":"acme-controller:latest"},"fieldPath":"spec.template.spec.containers[0].image","paused": "false"}
+      ]
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: acme-controller
+    spec:
+      containers:
+      - name: amce-controller
+        image: ""
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        - name: OPENSHIFT_ACME_EXPOSER_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: OPENSHIFT_ACME_ACMEURL
+          value: "https://acme-v01.api.letsencrypt.org/directory"
+        - name: OPENSHIFT_ACME_LOGLEVEL
+          value: "4"
