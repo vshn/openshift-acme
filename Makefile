@@ -57,10 +57,8 @@ check-govet:
 
 .PHONY: check-vendor
 check-vendor:
-	+@export tmpgopath tmpdir && tmpgopath=$$(mktemp -d) && tmpdir=$${tmpgopath}/src/$(GO_IMPORT_PATH) && \
-	mkdir -p $${tmpdir}/ && echo "Copying sources to $${tmpdir} to check ./vendor directory..." && cp -r ./ $${tmpdir} && \
-	GOPATH=$${tmpgopath} make -C $${tmpdir} ensure-vendor && \
-	(r=$$(diff -r ./ $${tmpdir}) || (printf "ERROR: The ./vendor folder doesn't reflect Gopkg.{toml,lock} or it hasn't been pruned.\nRun 'make ensure-vendor' to fix it.\n"; exit 1);)
+	@export vendors && vendors=$$(find ./vendor/ -mindepth 1 -type d -name 'vendor') && \
+	if [ -n "$${vendors}" ]; then printf "ERROR: There are nested vendor directories: \n"; printf "%s\n" $${vendors[@]}; exit 1; fi
 
 .PHONY: format
 format: format-gofmt format-goimports
@@ -73,24 +71,9 @@ format-gofmt:
 format-goimports:
 	$(GOIMPORTS) -w $(GO_FILES)
 
-define dep-prune:=
-dep prune $(GOFLAGS)
-find ./vendor/ -type f -name '*_test.go' -not -name '*.go'
-endef
-
-.PHONY: ensure-vendor
-ensure-vendor:
-	dep ensure $(GOFLAGS)
-	$(call dep-prune)
-
 .PHONY: update-vendor
 update-vendor:
-	dep ensure -update $(GOFLAGS)
-	$(call dep-prune)
-
-.PHONY: prune-vendor
-prune-vendor:
-	$(call dep-prune)
+	glide update --strip-vendor
 
 .PHONY: image
 image:

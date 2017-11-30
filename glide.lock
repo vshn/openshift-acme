@@ -1,5 +1,5 @@
 hash: 40b847385b319787412bc0d0e35e3709b01bfcc7de7e83450d249b11c1c7fa6a
-updated: 2017-11-02T15:48:31.150239578+01:00
+updated: 2017-11-30T20:38:45.26255182+01:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
@@ -23,12 +23,6 @@ imports:
   version: 6aced65f8501fe1217321abf0749d354824ba2ff
 - name: github.com/go-openapi/swag
   version: 1d0bd113de87027671077d3c71eb3ac5d7dbba72
-- name: github.com/go-playground/ansi
-  version: fd5b8faa557e2cef2a634378fd623e74097adb5c
-- name: github.com/go-playground/log
-  version: effffa996b223e0eb700093c6ea8d75cdf0dc908
-  subpackages:
-  - handlers/console
 - name: github.com/gogo/protobuf
   version: c0656edd0d9eab7c66d1eb0c568f9039345796f7
   subpackages:
@@ -132,14 +126,14 @@ imports:
   - matchers/support/goraph/util
   - types
 - name: github.com/openshift/api
-  version: 3713da6d7874dfa37eca30edfa40b09c83e690f9
+  version: a6905405c788ff2e9431d98cbc4c23b2a8596451
   subpackages:
   - oauth/v1
   - project/v1
   - route/v1
   - user/v1
 - name: github.com/openshift/client-go
-  version: 6940ad472a4b0adb9a2f0b97ddbc0b6d0bf1f4b2
+  version: 2f81007a052d0fa70641a6bc337d1238e6e191db
   subpackages:
   - oauth/clientset/versioned
   - oauth/clientset/versioned/scheme
@@ -175,7 +169,7 @@ imports:
 - name: github.com/spf13/jwalterweatherman
   version: 12bd96e66386c1960ab0f74ced1362f66f552f7b
 - name: github.com/spf13/pflag
-  version: 97afa5e7ca8a08a383cb259e06636b5e2cc7897f
+  version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/spf13/viper
   version: 8ef37cbca71638bf32f3d5e194117d4cb46da163
 - name: golang.org/x/crypto
@@ -187,7 +181,6 @@ imports:
   version: 1c05540f6879653db88113bc4a2b70aec4bd491f
   subpackages:
   - context
-  - context/ctxhttp
   - html
   - html/atom
   - html/charset
@@ -228,7 +221,7 @@ imports:
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/yaml.v2
-  version: eb3733d160e74a9c7e442f435eb3bea458e1d19f
+  version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - name: k8s.io/api
   version: 4df58c811fe2e65feb879227b2b245e4dc26e7ad
   subpackages:
@@ -247,6 +240,7 @@ imports:
   - certificates/v1beta1
   - core/v1
   - extensions/v1beta1
+  - imagepolicy/v1alpha1
   - networking/v1
   - policy/v1beta1
   - rbac/v1
@@ -263,9 +257,11 @@ imports:
   - pkg/api/errors
   - pkg/api/meta
   - pkg/api/resource
+  - pkg/api/validation
   - pkg/apis/meta/internalversion
   - pkg/apis/meta/v1
   - pkg/apis/meta/v1/unstructured
+  - pkg/apis/meta/v1/validation
   - pkg/apis/meta/v1alpha1
   - pkg/conversion
   - pkg/conversion/queryparams

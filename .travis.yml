@@ -23,7 +23,8 @@ before_install:
 - |
   if [ ${AUTHORITATIVE} ]; then
     go get golang.org/x/tools/cmd/goimports
-    go get github.com/golang/dep/cmd/dep
+    go get github.com/Masterminds/glide
+    go get github.com/sgotti/glide-vc
     go get github.com/openshift/source-to-image/cmd/s2i
     curl -L https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip | bsdtar -xvf- -C ${GOPATH}/bin/ && chmod +x ${GOPATH}/bin/ngrok
     tmp=`mktemp`
