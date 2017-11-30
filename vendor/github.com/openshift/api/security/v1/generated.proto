@@ -152,6 +152,10 @@ message SELinuxContextStrategyOptions {
 
 // SecurityContextConstraints governs the ability to make requests that affect the SecurityContext
 // that will be applied to a container.
+// For historical reasons SCC was exposed under the core Kubernetes API group.
+// That exposure is deprecated and will be removed in a future release - users
+// should instead use the security.openshift.io group to manage
+// SecurityContextConstraints.
 message SecurityContextConstraints {
   // Standard object's metadata.
   // More info: http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata
@@ -229,9 +233,11 @@ message SecurityContextConstraints {
   optional bool readOnlyRootFilesystem = 17;
 
   // The users who have permissions to use this security context constraints
+  // +optional
   repeated string users = 18;
 
   // The groups that have permission to use this security context constraints
+  // +optional
   repeated string groups = 19;
 
   // SeccompProfiles lists the allowed profiles that may be set for the pod or

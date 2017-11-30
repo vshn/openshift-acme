@@ -16,6 +16,10 @@ var AllowAllCapabilities corev1.Capability = "*"
 
 // SecurityContextConstraints governs the ability to make requests that affect the SecurityContext
 // that will be applied to a container.
+// For historical reasons SCC was exposed under the core Kubernetes API group.
+// That exposure is deprecated and will be removed in a future release - users
+// should instead use the security.openshift.io group to manage
+// SecurityContextConstraints.
 type SecurityContextConstraints struct {
 	metav1.TypeMeta `json:",inline"`
 	// Standard object's metadata.
@@ -79,9 +83,11 @@ type SecurityContextConstraints struct {
 	ReadOnlyRootFilesystem bool `json:"readOnlyRootFilesystem" protobuf:"varint,17,opt,name=readOnlyRootFilesystem"`
 
 	// The users who have permissions to use this security context constraints
-	Users []string `json:"users,omitempty" protobuf:"bytes,18,rep,name=users"`
+	// +optional
+	Users []string `json:"users" protobuf:"bytes,18,rep,name=users"`
 	// The groups that have permission to use this security context constraints
-	Groups []string `json:"groups,omitempty" protobuf:"bytes,19,rep,name=groups"`
+	// +optional
+	Groups []string `json:"groups" protobuf:"bytes,19,rep,name=groups"`
 
 	// SeccompProfiles lists the allowed profiles that may be set for the pod or
 	// container's seccomp annotations.  An unset (nil) or empty value means that no profiles may
