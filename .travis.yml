@@ -4,7 +4,7 @@ go_import_path: github.com/tnozicka/openshift-acme
 
 go:
 - 1.8.x
-- master
+- 1.x.x 
 
 matrix:
   include:
@@ -19,6 +19,7 @@ matrix:
         - bsdtar
 
 before_install:
+- go version
 - |
   if [ ${AUTHORITATIVE} ]; then
     go get golang.org/x/tools/cmd/goimports
