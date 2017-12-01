@@ -144,6 +144,11 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 
 	loglevel := v.GetInt(Flag_LogLevel_Key)
 	glog.Infof("ACME server loglevel == %d", loglevel)
+	glog.V(1).Info("test loglevel 1")
+	glog.V(2).Info("test loglevel 2")
+	glog.V(3).Info("test loglevel 3")
+	glog.V(4).Info("test loglevel 4")
+	glog.V(5).Info("test loglevel 5")
 
 	config := getClientConfig(v.GetString(Flag_Kubeconfig_Key))
 
