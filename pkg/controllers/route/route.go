@@ -561,6 +561,8 @@ func (rc *RouteController) Run(workers int, stopCh <-chan struct{}) {
 		return
 	}
 
+	glog.Info("Starting Route controller: informer caches synced")
+
 	for i := 0; i < workers; i++ {
 		go wait.Until(rc.runWorker, time.Second, stopCh)
 	}

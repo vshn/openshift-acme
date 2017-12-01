@@ -76,6 +76,7 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_ExposerListenIP)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Namespace_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_AccountName_Key)
+			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_LogLevel_Key)
 
 			return nil
 		},
@@ -139,7 +140,10 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	}()
 
 	acmeUrl := v.GetString(Flag_Acmeurl_Key)
-	glog.Infof("ACME server url is '%s'", acmeUrl)
+	glog.Infof("ACME server url is %q", acmeUrl)
+
+	loglevel := v.GetInt(Flag_LogLevel_Key)
+	glog.Infof("ACME server loglevel == %d", loglevel)
 
 	config := getClientConfig(v.GetString(Flag_Kubeconfig_Key))
 

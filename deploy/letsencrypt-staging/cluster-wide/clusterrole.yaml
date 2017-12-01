@@ -1,4 +1,4 @@
-kind: Role
+kind: ClusterRole
 metadata:
   name: openshift-acme
   labels:
@@ -8,6 +8,7 @@ rules:
   - "route.openshift.io"
   resources:
   - routes
+  - routes/finalizers
   verbs:
   - create
   - get
@@ -49,6 +50,7 @@ rules:
   - ""
   resources:
   - secrets
+  - secrets/finalizers
   verbs:
   - create
   - get
@@ -56,3 +58,4 @@ rules:
   - watch
   - update
   - patch
+  - delete
