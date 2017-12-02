@@ -60,9 +60,6 @@ script:
     ngrok http -log stdout -log-level debug -log-format json 80 > ${logfile} &
     domain=$((tail -n +0 -f ${logfile} || true) | grep --text -m 1 'Hostname' | sed -r 's/.*Hostname:([^] ]*).*/\1/')
     echo "domain: ${domain}"
-    deploymentFile=$(mktemp)
-    sed -e 's/imagePullPolicy: IfNotPresent/imagePullPolicy: Never/' -e 's/value: "8"/value: "9"/' ./deploy/deploymentconfig-letsencrypt-staging.yaml > ${deploymentFile}
-    grep -q 'imagePullPolicy: Never' ${deploymentFile}
     [[ ! -z "${OPENSHIFT_VERSIONS}" ]]
     make -j64 test-extended GOFLAGS="-i -race"
     for version in ${OPENSHIFT_VERSIONS}; do
