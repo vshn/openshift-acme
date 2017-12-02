@@ -34,7 +34,7 @@ before_install:
     sudo mount --make-shared /
     sudo service docker restart
     mkdir /tmp/oc
-    hack/get.oc.sh /tmp/oc
+    bash -x hack/get.oc.sh /tmp/oc
   fi
 
 install:
@@ -62,7 +62,7 @@ script:
     ngrok http -log stdout -log-level debug -log-format json 80 > ${logfile} &
     domain=$((tail -n +0 -f ${logfile} || true) | grep --text -m 1 'Hostname' | sed -r 's/.*Hostname:([^] ]*).*/\1/')
     echo "domain: ${domain}"
-    hack/run-extended-test-on-all-versions.sh /tmp/oc
+    bash -x hack/run-extended-test-on-all-versions.sh /tmp/oc
   fi
 
 after_failure:
