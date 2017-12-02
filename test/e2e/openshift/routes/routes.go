@@ -28,6 +28,7 @@ var _ = g.Describe("Routes", func() {
 	// FIXME: extract this to general config
 	domain := flag.String("domain", "", "domain to use - must be routed to testing OpenShift instance")
 	flag.Parse()
+	o.Expect(domain).NotTo(o.BeEmpty())
 
 	g.It("should create cert for annotated Route", func() {
 		namespace := f.Namespace()

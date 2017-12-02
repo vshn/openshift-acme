@@ -18,7 +18,7 @@ IMAGE_NAME :=docker.io/tnozicka/openshift-acme
 
 # we intentionaly don't specify this value because test are making changes to the cluster so we wan't user to configure it explicitely
 GO_ET_KUBECONFIG :="<unspecified>"
-GO_ET_DOMAIN :=""
+GO_ET_DOMAIN :=
 
 .PHONY: build
 build:
@@ -35,7 +35,7 @@ test:
 
 .PHONY: test-extended
 test-extended:
-	export KUBECONFIG=$(GO_ET_KUBECONFIG) && go test $(GOFLAGS) $(GO_PACKAGES_TEST) -domain $(GO_ET_DOMAIN) $(TEST_FLAGS)
+	export KUBECONFIG=$(GO_ET_KUBECONFIG) && go test $(GOFLAGS) $(GO_PACKAGES_TEST) -domain="$(GO_ET_DOMAIN)" $(TEST_FLAGS)
 
 .PHONY: checks
 checks: check-gofmt check-goimports check-govet

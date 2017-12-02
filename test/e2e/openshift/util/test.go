@@ -6,6 +6,8 @@ import (
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/tnozicka/openshift-acme/test/e2e/framework"
 )
@@ -17,14 +19,11 @@ func KubeConfigPath() string {
 }
 
 func InitTest() {
-
 	TestContext.KubeConfigPath = KubeConfigPath()
 	framework.Logf("KubeConfigPath: %q", TestContext.KubeConfigPath)
 	if TestContext.KubeConfigPath == "" {
 		framework.Failf("You have to specify KubeConfigPath. (Use KUBECONFIG environment variable.)")
 	}
-
-	TestContext.CreateTestingNS = framework.CreateTestingProjectAndChangeUser
 
 	switch p := framework.DeleteTestingNSPolicyType(os.Getenv("DELETE_NS_POLICY")); p {
 	case framework.DeleteTestingNSPolicyAlways,
@@ -35,6 +34,20 @@ func InitTest() {
 		TestContext.DeleteTestingNSPolicy = framework.DeleteTestingNSPolicyAlways
 	default:
 		framework.Failf("Invalid DeleteTestingNSPolicy: %q", TestContext.DeleteTestingNSPolicy)
+	}
+
+	fixedNamespace := os.Getenv("FIXED_NAMESPACE")
+	if fixedNamespace == "" {
+		TestContext.DeleteTestingNSPolicy = framework.DeleteTestingNSPolicyNever
+		TestContext.CreateTestingNS = func(f *framework.Framework, name string, labels map[string]string) (*corev1.Namespace, error) {
+			return &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: fixedNamespace,
+				},
+			}, nil
+		}
+	} else {
+		TestContext.CreateTestingNS = framework.CreateTestingProjectAndChangeUser
 	}
 }
 
