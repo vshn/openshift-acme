@@ -33,7 +33,8 @@ before_install:
     sudo mv ${tmp} /etc/default/docker
     sudo mount --make-shared /
     sudo service docker restart
-    version="v3.6.0" commitId="c4dd4cf" && curl -L https://github.com/openshift/origin/releases/download/${version}/openshift-origin-client-tools-${version}-${commitId}-linux-64bit.tar.gz | tar -f - -x -z --strip-components=1 -C ${GOPATH}/bin/ openshift-origin-client-tools-${version}-${commitId}-linux-64bit/oc
+    mkdir /tmp/oc
+    hack/get.oc.sh /tmp/oc
   fi
 
 install:
@@ -61,35 +62,7 @@ script:
     ngrok http -log stdout -log-level debug -log-format json 80 > ${logfile} &
     domain=$((tail -n +0 -f ${logfile} || true) | grep --text -m 1 'Hostname' | sed -r 's/.*Hostname:([^] ]*).*/\1/')
     echo "domain: ${domain}"
-    [[ ! -z "${OPENSHIFT_VERSIONS}" ]]
-    make -j64 test-extended GOFLAGS="-i -race"
-    for version in ${OPENSHIFT_VERSIONS}; do
-      oc cluster up --version=${version}
-      oc login -u system:admin
-      oc new-project acme-asdf
-      sleep 60
-      oc get sa
-      oc get secret
-      oc get all -n default
-      docker login --help
-      oc create -fdeploy/letsencrypt-staging/cluster-wide/{clusterrole,serviceaccount,imagestream,deployment}.yaml
-      oc adm policy add-cluster-role-to-user openshift-acme -z openshift-acme
-      oc patch is openshift-acme -p '{"spec":{"tags":[{"name":"latest","importPolicy":{"scheduled": false}}]}}'
-      sa_secret_name=$(oc get sa builder --template='{{ (index .imagePullSecrets 0).name }}')
-      token=$(oc get secret ${sa_secret_name} --template='{{index .metadata.annotations "openshift.io/token-secret.value"}}')
-      registry=$(oc get svc/docker-registry -n default --template='{{.spec.clusterIP}}:{{(index .spec.ports 0).port}}')
-      docker login -u aaa -p ${token} ${registry}
-      is_image=${registry}/$(oc project --short)/openshift-acme
-      docker tag openshift-acme-candidate ${is_image}
-      docker push ${is_image}
-      sleep 10
-      oc get all
-      oc whoami
-      oc whoami --config ~/.kube/config
-      make -j64 test-extended GOFLAGS="-race" GO_ET_KUBECONFIG=~/.kube/config GO_ET_DOMAIN=${domain} || (oc logs dc/acme-controller -n acme-asdf; false)
-      oc logs dc/acme-controller -n acme-asdf
-      oc cluster down
-    done
+    hack/run-extended-test-on-all-versions.sh /tmp/oc
   fi
 
 after_failure:
