@@ -129,6 +129,7 @@ func (f *Framework) ChangeUser(username string, namespace string) {
 		UserName:   user.Name,
 		UserUID:    string(user.UID),
 		ClientName: "openshift-challenging-client",
+		ExpiresIn:  90000,
 	})
 	o.Expect(err).NotTo(o.HaveOccurred())
 

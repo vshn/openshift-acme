@@ -9,7 +9,8 @@ go:
 matrix:
   include:
   - go: 1.9.x
-    env: AUTHORITATIVE=true OPENSHIFT_VERSIONS="v3.6.0 v3.7.0"
+#    env: AUTHORITATIVE=true OPENSHIFT_VERSIONS="v3.6.0 v3.7.0"
+    env: AUTHORITATIVE=true OPENSHIFT_VERSIONS="v3.6.1 v3.7.0 v3.8.0-alpha.1 v3.9.0-alpha.0"
     sudo: required
     services:
      - docker
@@ -64,8 +65,13 @@ script:
     make -j64 test-extended GOFLAGS="-i -race"
     for version in ${OPENSHIFT_VERSIONS}; do
       oc cluster up --version=${version}
-      oc new-project acme-asdf
       oc login -u system:admin
+      oc new-project acme-asdf
+      sleep 60
+      oc get sa
+      oc get secret
+      oc get all -n default
+      docker login --help
       oc create -fdeploy/letsencrypt-staging/cluster-wide/{clusterrole,serviceaccount,imagestream,deployment}.yaml
       oc adm policy add-cluster-role-to-user openshift-acme -z openshift-acme
       oc patch is openshift-acme -p '{"spec":{"tags":[{"name":"latest","importPolicy":{"scheduled": false}}]}}'
@@ -74,10 +80,12 @@ script:
       registry=$(oc get svc/docker-registry -n default --template='{{.spec.clusterIP}}:{{(index .spec.ports 0).port}}')
       docker login -u aaa -p ${token} ${registry}
       is_image=${registry}/$(oc project --short)/openshift-acme
-      docker tag openshift-acme-candidat ${is_image}
-      docker ${is_image}
+      docker tag openshift-acme-candidate ${is_image}
+      docker push ${is_image}
       sleep 10
-      oc status -v
+      oc get all
+      oc whoami
+      oc whoami --config ~/.kube/config
       make -j64 test-extended GOFLAGS="-race" GO_ET_KUBECONFIG=~/.kube/config GO_ET_DOMAIN=${domain} || (oc logs dc/acme-controller -n acme-asdf; false)
       oc logs dc/acme-controller -n acme-asdf
       oc cluster down
