@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	DefaultLoglevel        = 0
+	DefaultLoglevel        = 2
 	Flag_LogLevel_Key      = "loglevel"
 	Flag_Kubeconfig_Key    = "kubeconfig"
 	Flag_Acmeurl_Key       = "acmeurl"
@@ -76,7 +76,13 @@ func NewOpenShiftAcmeCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_ExposerListenIP)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_Namespace_Key)
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_AccountName_Key)
+
 			cmdutil.BindViper(v, cmd.PersistentFlags(), Flag_LogLevel_Key)
+			if v.IsSet(Flag_LogLevel_Key) {
+				// The flag itself needs to be set for glog to recognize it.
+				// Makes sure loglevel can be set by environment variable as well.
+				cmd.PersistentFlags().Set(Flag_LogLevel_Key, v.GetString(Flag_LogLevel_Key))
+			}
 
 			return nil
 		},
@@ -142,13 +148,12 @@ func RunServer(v *viper.Viper, cmd *cobra.Command, out io.Writer) error {
 	acmeUrl := v.GetString(Flag_Acmeurl_Key)
 	glog.Infof("ACME server url is %q", acmeUrl)
 
-	loglevel := v.GetInt(Flag_LogLevel_Key)
+	// Better to read flag value than viper here to make sure the value is what glog uses.
+	loglevel, err := cmd.PersistentFlags().GetInt32(Flag_LogLevel_Key)
+	if err != nil {
+		return err
+	}
 	glog.Infof("ACME server loglevel == %d", loglevel)
-	glog.V(1).Info("test loglevel 1")
-	glog.V(2).Info("test loglevel 2")
-	glog.V(3).Info("test loglevel 3")
-	glog.V(4).Info("test loglevel 4")
-	glog.V(5).Info("test loglevel 5")
 
 	config := getClientConfig(v.GetString(Flag_Kubeconfig_Key))
 

@@ -7,17 +7,17 @@ import (
 
 	g "github.com/onsi/ginkgo"
 	o "github.com/onsi/gomega"
-
-	"github.com/tnozicka/openshift-acme/test/e2e/framework"
-	"github.com/tnozicka/openshift-acme/test/e2e/openshift/util"
-
 	routev1 "github.com/openshift/api/route/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/apimachinery/pkg/watch"
+
+	routeutil "github.com/tnozicka/openshift-acme/pkg/route"
+	"github.com/tnozicka/openshift-acme/test/e2e/framework"
+	"github.com/tnozicka/openshift-acme/test/e2e/openshift/util"
 )
 
 const (
+	RouteAdmissionTimeout          = 5 * time.Second
 	CertificateProvisioningTimeout = 60 * time.Second
 )
 
@@ -52,8 +52,24 @@ var _ = g.Describe("Routes", func() {
 
 		w, err := f.RouteClientset().RouteV1().Routes(namespace).Watch(metav1.SingleObject(route.ObjectMeta))
 		o.Expect(err).NotTo(o.HaveOccurred())
+		event, err := watch.Until(RouteAdmissionTimeout, w, func(event watch.Event) (bool, error) {
+			switch event.Type {
+			case watch.Modified:
+				r := event.Object.(*routev1.Route)
+				if routeutil.IsAdmitted(r) {
+					return true, nil
+				}
 
-		event, err := watch.Until(CertificateProvisioningTimeout, w, func(event watch.Event) (bool, error) {
+				return false, nil
+			default:
+				return false, fmt.Errorf("unexpected event - type: %s, obj: %#v", event.Type, event.Object)
+			}
+		})
+		o.Expect(err).NotTo(o.HaveOccurred(), "Failed to wait for Route to be admitted by the router!")
+
+		w, err = f.RouteClientset().RouteV1().Routes(namespace).Watch(metav1.SingleObject(route.ObjectMeta))
+		o.Expect(err).NotTo(o.HaveOccurred())
+		event, err = watch.Until(CertificateProvisioningTimeout, w, func(event watch.Event) (bool, error) {
 			switch event.Type {
 			case watch.Modified:
 				r := event.Object.(*routev1.Route)

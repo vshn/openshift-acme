@@ -7,6 +7,7 @@ SHELL :=/bin/bash
 GOFMT :=gofmt -s
 GOIMPORTS :=goimports -e
 GOFLAGS :=-v
+TEST_FLAGS :=-ginkgo.v
 
 GO_FILES :=$(shell find . -name '*.go' -not -path './vendor/*' -print)
 GO_PACKAGES := ./cmd/... ./pkg/...
@@ -34,7 +35,7 @@ test:
 
 .PHONY: test-extended
 test-extended:
-	export KUBECONFIG=$(GO_ET_KUBECONFIG) && go test $(GOFLAGS) $(GO_PACKAGES_TEST) -domain $(GO_ET_DOMAIN)
+	export KUBECONFIG=$(GO_ET_KUBECONFIG) && go test $(GOFLAGS) $(GO_PACKAGES_TEST) -domain $(GO_ET_DOMAIN) $(TEST_FLAGS)
 
 .PHONY: checks
 checks: check-gofmt check-goimports check-govet
@@ -77,5 +78,5 @@ update-vendor:
 
 .PHONY: image
 image:
-	s2i build . docker.io/tnozicka/s2i-centos7-golang $(IMAGE_NAME) -e APP_URI=$(GO_IMPORT_PATH) --runtime-image=docker.io/tnozicka/s2i-centos7-golang-runtime --runtime-artifact=/opt/app-root/src/bin/app:bin/
+	s2i build . --copy docker.io/tnozicka/s2i-centos7-golang $(IMAGE_NAME) -e APP_URI=$(GO_IMPORT_PATH) --runtime-image=docker.io/tnozicka/s2i-centos7-golang-runtime --runtime-artifact=/opt/app-root/src/bin/app:bin/
 

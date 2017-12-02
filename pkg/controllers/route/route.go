@@ -461,12 +461,12 @@ func (rc *RouteController) handle(key string) error {
 
 			delete(route.Annotations, api.AcmeAwaitingAuthzUrlAnnotation)
 
-			route, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(route)
+			updatedRoute, err := rc.routeClientset.RouteV1().Routes(route.Namespace).Update(route)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to update route %s/%s with new certificates: %v", route.Namespace, route.Name, err)
 			}
 
-			rc.recorder.Event(route, corev1.EventTypeNormal, "AcmeCertificateProvisioned", "Successfully provided new certificate")
+			rc.recorder.Event(updatedRoute, corev1.EventTypeNormal, "AcmeCertificateProvisioned", "Successfully provided new certificate")
 
 		case acme.StatusInvalid:
 			rc.recorder.Eventf(routeReadOnly, corev1.EventTypeWarning, "AcmeFailedAuthorization", "Acme provider failed to validate domain %q: %s", routeReadOnly.Spec.Host, acmeclient.GetAuthorizationErrors(authorization))

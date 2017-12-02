@@ -52,7 +52,7 @@ script:
 - make -j64 test GOFLAGS=-race
 - if [ ${AUTHORITATIVE} ]; then make -j64 checks; fi
 - if [ ${AUTHORITATIVE} ]; then make -j64 check-vendor; fi
-- if [ ${AUTHORITATIVE} ]; then make -j64 image; fi
+- if [ ${AUTHORITATIVE} ]; then make -j64 image IMAGE_NAME=openshift-acme-candidate; fi
 - |
   set -e
   if [ ${AUTHORITATIVE} ]; then
@@ -69,13 +69,18 @@ script:
       oc cluster up --version=${version}
       oc new-project acme-asdf
       oc login -u system:admin
-      oc create -f ./deploy/clusterrole.yaml
-      oc adm policy add-cluster-role-to-user acme-controller system:serviceaccount:acme-asdf:default
-      oc login -u developer -p developer
-      oc create -f ./deploy/service.yaml -f ${deploymentFile}
+      oc create -fdeploy/letsencrypt-staging/cluster-wide/{clusterrole,serviceaccount,imagestream,deployment}.yaml
+      oc adm policy add-cluster-role-to-user openshift-acme -z openshift-acme
+      oc patch is openshift-acme -p '{"spec":{"tags":[{"name":"latest","importPolicy":{"scheduled": false}}]}}'
+      sa_secret_name=$(oc get sa builder --template='{{ (index .imagePullSecrets 0).name }}')
+      token=$(oc get secret ${sa_secret_name} --template='{{index .metadata.annotations "openshift.io/token-secret.value"}}')
+      registry=$(oc get svc/docker-registry -n default --template='{{.spec.clusterIP}}:{{(index .spec.ports 0).port}}')
+      docker login -u aaa -p ${token} ${registry}
+      is_image=${registry}/$(oc project --short)/openshift-acme
+      docker tag openshift-acme-candidat ${is_image}
+      docker ${is_image}
       sleep 10
       oc status -v
-      oc login -u system:admin
       make -j64 test-extended GOFLAGS="-race" GO_ET_KUBECONFIG=~/.kube/config GO_ET_DOMAIN=${domain} || (oc logs dc/acme-controller -n acme-asdf; false)
       oc logs dc/acme-controller -n acme-asdf
       oc cluster down
@@ -91,6 +96,7 @@ after_success:
 - |
   if [[ ${AUTHORITATIVE} && "${TRAVIS_BRANCH}" == "master" && "${TRAVIS_PULL_REQUEST}" == "false" ]]; then
     docker login -u="${DOCKER_USER}" -p="${DOCKER_PASSWD}"
+    docker tag openshift-acme-candidate docker.io/tnozicka/openshift-acme
     docker push docker.io/tnozicka/openshift-acme
   fi
 
