@@ -26,19 +26,13 @@ echo binaries: ${binaries}
 make -j64 test-extended GOFLAGS='-i -v -race' TEST_FLAGS=''
 
 function setupClusterWide() {
-    tmpdir=$(mktemp -d)
-    cp -r deploy/letsencrypt-staging/cluster-wide/* ${tmpdir}/
-    sed -i 's/scheduled: true/scheduled: false/' ${tmpdir}/imagestream.yaml
-    oc create -f${tmpdir}/{clusterrole,serviceaccount,imagestream,deployment}.yaml
+    oc create -fdeploy/letsencrypt-staging/cluster-wide/{clusterrole,serviceaccount,deployment}.yaml
     oc adm policy add-cluster-role-to-user openshift-acme -z openshift-acme
     export FIXED_NAMESPACE=""
 }
 
 function setupSingleNamespace() {
-    tmpdir=$(mktemp -d)
-    cp -r deploy/letsencrypt-staging/single-namespace/* ${tmpdir}/
-    sed -i 's/scheduled: true/scheduled: false/' ${tmpdir}/imagestream.yaml
-    oc create -f${tmpdir}/{role,serviceaccount,imagestream,deployment}.yaml
+    oc create -fdeploy/letsencrypt-staging/single-namespace/{role,serviceaccount,deployment}.yaml
     oc policy add-role-to-user openshift-acme --role-namespace="$(oc project --short)" -z openshift-acme
     export FIXED_NAMESPACE=$(oc project --short)
 }
@@ -83,8 +77,7 @@ for binary in ${binaries}; do
         oc new-project acme-aaa
         oc get sa,secret
 
-        ${setup}
-
+        # Create ImageStream from the image build earlier
         sa_secret_name=$(oc get sa builder --template='{{ (index .imagePullSecrets 0).name }}')
         token=$(oc get secret ${sa_secret_name} --template='{{index .metadata.annotations "openshift.io/token-secret.value"}}')
         registry=$(oc get svc/docker-registry -n default --template='{{.spec.clusterIP}}:{{(index .spec.ports 0).port}}')
@@ -92,6 +85,10 @@ for binary in ${binaries}; do
         is_image=${registry}/$(oc project --short)/openshift-acme
         docker tag openshift-acme-candidate ${is_image}
         docker push ${is_image}
+
+        oc get is openshift-acme
+
+        ${setup}
 
         oc get all
         oc rollout status deploy/openshift-acme

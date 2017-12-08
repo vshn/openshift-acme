@@ -92,20 +92,20 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	createdService, err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Create(service)
 	if err != nil {
 		if !kapierrors.IsAlreadyExists(err) {
-			return err
+			return fmt.Errorf("failed to create exposing Service %s/%s: %v", service.Namespace, service.Name, err)
 		}
 
 		glog.Warningf("Forwarding Service %s/%s already exists, forcing rewrite", createdService.Namespace, createdService.Name)
 
 		preexistingService, err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Get(service.Name, metav1.GetOptions{})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get exposing Service %s/%s before updating: %v", service.Namespace, service.Name, err)
 		}
 
 		service.ResourceVersion = preexistingService.ResourceVersion
 		createdService, err = e.kubeClientset.CoreV1().Services(e.route.Namespace).Update(service)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to update exposing Service %s/%s: %v", service.Namespace, service.Name, err)
 		}
 	}
 	ownerRefToService := metav1.OwnerReference{
@@ -147,20 +147,20 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	createdEndpoints, err := e.kubeClientset.CoreV1().Endpoints(e.route.Namespace).Create(endpoints)
 	if err != nil {
 		if !kapierrors.IsAlreadyExists(err) {
-			return err
+			return fmt.Errorf("failed to create exposing Endpoints %s/%s: %v", e.route.Namespace, endpoints.Name, err)
 		}
 
 		glog.Warningf("Forwarding Endpoints %s/%s already exists, forcing rewrite", createdEndpoints.Namespace, createdEndpoints.Name)
 
 		preexistingEndpoints, err := e.kubeClientset.CoreV1().Endpoints(e.route.Namespace).Get(endpoints.Name, metav1.GetOptions{})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get exposing Endpoints %s/%s before updating: %v", e.route.Namespace, endpoints.Name, err)
 		}
 
 		endpoints.ResourceVersion = preexistingEndpoints.ResourceVersion
 		createdEndpoints, err = e.kubeClientset.CoreV1().Endpoints(e.route.Namespace).Update(endpoints)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to update exposing Endpoints %s/%s: %v", e.route.Namespace, endpoints.Name, err)
 		}
 	}
 
@@ -193,20 +193,20 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	createdRoute, err := e.routeClientset.RouteV1().Routes(e.route.Namespace).Create(route)
 	if err != nil {
 		if !kapierrors.IsAlreadyExists(err) {
-			return err
+			return fmt.Errorf("failed to create exposing Route %s/%s: %v", e.route.Namespace, route.Name, err)
 		}
 
 		glog.Warningf("Forwarding Route %s/%s already exists, forcing rewrite", createdRoute.Namespace, createdRoute.Name)
 
 		preexistingRoute, err := e.routeClientset.RouteV1().Routes(e.route.Namespace).Get(route.Name, metav1.GetOptions{})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get exposing Route %s/%s before updating: %v", e.route.Namespace, route.Name, err)
 		}
 
 		route.ResourceVersion = preexistingRoute.ResourceVersion
 		createdRoute, err = e.routeClientset.RouteV1().Routes(e.route.Namespace).Update(route)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to update exposing Route %s/%s: %v", e.route.Namespace, route.Name, err)
 		}
 	}
 
@@ -230,7 +230,7 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 			}
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("exceeded timeout %v while waiting for Route %s/%s to be admitted: %v", RouterAdmitTimeout, createdRoute.Namespace, createdRoute.Name, err)
 		}
 	}
 
@@ -240,7 +240,12 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	time.Sleep(10 * time.Second)
 	glog.V(4).Infof("Waiting 10s - done")
 
-	return e.underlyingExposer.Expose(c, domain, token)
+	err = e.underlyingExposer.Expose(c, domain, token)
+	if err != nil {
+		return fmt.Errorf("failed to expose challenge for Route %s/%s: ", e.route.Namespace, e.route.Name)
+	}
+
+	return nil
 }
 
 func (e *Exposer) Remove(c *acme.Client, domain string, token string) error {

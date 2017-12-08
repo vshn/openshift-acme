@@ -337,13 +337,13 @@ func (rc *RouteController) handle(key string) error {
 
 		client, err := rc.acmeClientFactory.GetClient(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get ACME client: %v", err)
 		}
 
 		// FIXME: definitely protect with expectations
 		authorization, err := client.Client.Authorize(ctx, routeReadOnly.Spec.Host)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to authorize domain %q: %v", routeReadOnly.Spec.Host, err)
 		}
 		glog.V(4).Infof("Created authorization %q for Route %s", authorization.URI, key)
 
@@ -356,6 +356,7 @@ func (rc *RouteController) handle(key string) error {
 			route.Annotations = make(map[string]string)
 		}
 		route.Annotations[api.AcmeAwaitingAuthzUrlAnnotation] = authorization.URI
+		// TODO: convert to PATCH to avoid loosing time and rate limits on update collisions
 		_, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(route)
 		if err != nil {
 			glog.Errorf("Failed to update Route %s: %v. Revoking authorization %q so it won't stay pending.", key, err, authorization.URI)
@@ -365,7 +366,7 @@ func (rc *RouteController) handle(key string) error {
 				glog.Errorf("Failed to revoke authorization %q: %v", acmeErr)
 			}
 
-			return err
+			return fmt.Errorf("failed to update authorizationURI: %v", err)
 		}
 
 		return nil
@@ -376,14 +377,14 @@ func (rc *RouteController) handle(key string) error {
 
 		client, err := rc.acmeClientFactory.GetClient(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get ACME client: %v", err)
 		}
 
 		authorizationUri := routeReadOnly.Annotations[api.AcmeAwaitingAuthzUrlAnnotation]
 		authorization, err := client.Client.GetAuthorization(ctx, authorizationUri)
 		// TODO: emit an event but don't fail as user can set it
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get ACME authorization: %v", err)
 		}
 
 		glog.V(4).Infof("Route %q: authorization state is %q", key, authorization.Status)
@@ -393,7 +394,7 @@ func (rc *RouteController) handle(key string) error {
 			exposers := rc.wrapExposers(rc.exposers, routeReadOnly)
 			authorization, err := client.AcceptAuthorization(ctx, authorization, routeReadOnly.Spec.Host, exposers)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to accept ACME authorization: %v", err)
 			}
 
 			if authorization.Status == acme.StatusPending {
@@ -427,25 +428,25 @@ func (rc *RouteController) handle(key string) error {
 			template.DNSNames = append(template.DNSNames, routeReadOnly.Spec.Host)
 			privateKey, err := rsa.GenerateKey(cryptorand.Reader, 4096)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to generate RSA key: %v", err)
 			}
 
 			csr, err := x509.CreateCertificateRequest(cryptorand.Reader, &template, privateKey)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create certificate request: %v", err)
 			}
 
 			// TODO: protect with expectations
 			// TODO: aks to split CreateCert func in acme library to avoid embedded pooling
 			der, certUrl, err := client.Client.CreateCert(ctx, csr, 0, true)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create ACME certificate: %v", err)
 			}
 			glog.V(4).Infof("Route %q - created certificate available at %s", key, certUrl)
 
 			certPemData, err := cert.NewCertificateFromDER(der, privateKey)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to convert certificate from DER to PEM: %v", err)
 			}
 
 			route := routeReadOnly.DeepCopy()
@@ -477,7 +478,7 @@ func (rc *RouteController) handle(key string) error {
 			route.Annotations[api.TlsAcmePausedAnnotation] = "true"
 			route, err = rc.routeClientset.RouteV1().Routes(route.Namespace).Update(route)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to pause Route: %v", err)
 			}
 
 		case acme.StatusRevoked:
