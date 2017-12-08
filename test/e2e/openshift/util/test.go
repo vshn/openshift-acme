@@ -18,6 +18,10 @@ func KubeConfigPath() string {
 	return os.Getenv("KUBECONFIG")
 }
 
+func Domain() string {
+	return os.Getenv("TEST_DOMAIN")
+}
+
 func InitTest() {
 	TestContext.KubeConfigPath = KubeConfigPath()
 	framework.Logf("KubeConfigPath: %q", TestContext.KubeConfigPath)
@@ -37,7 +41,7 @@ func InitTest() {
 	}
 
 	fixedNamespace := os.Getenv("FIXED_NAMESPACE")
-	if fixedNamespace == "" {
+	if fixedNamespace != "" {
 		TestContext.DeleteTestingNSPolicy = framework.DeleteTestingNSPolicyNever
 		TestContext.CreateTestingNS = func(f *framework.Framework, name string, labels map[string]string) (*corev1.Namespace, error) {
 			return &corev1.Namespace{
@@ -49,6 +53,12 @@ func InitTest() {
 	} else {
 		TestContext.CreateTestingNS = framework.CreateTestingProjectAndChangeUser
 	}
+
+	domain := Domain()
+	if domain == "" {
+		framework.Failf("You have to specify TEST_DOMAIN!")
+	}
+	framework.Logf("TEST_DOMAIN is %q", domain)
 }
 
 func ExecuteTest(t *testing.T, suite string) {

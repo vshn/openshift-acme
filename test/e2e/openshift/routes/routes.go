@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"flag"
 	"fmt"
 	"time"
 
@@ -25,11 +24,6 @@ var _ = g.Describe("Routes", func() {
 	defer g.GinkgoRecover()
 	f := framework.NewFramework("routes")
 
-	// FIXME: extract this to general config
-	domain := flag.String("domain", "", "domain to use - must be routed to testing OpenShift instance")
-	flag.Parse()
-	o.Expect(domain).NotTo(o.BeEmpty())
-
 	g.It("should create cert for annotated Route", func() {
 		namespace := f.Namespace()
 
@@ -41,7 +35,7 @@ var _ = g.Describe("Routes", func() {
 				},
 			},
 			Spec: routev1.RouteSpec{
-				Host: *domain,
+				Host: util.Domain(),
 				To: routev1.RouteTargetReference{
 					Name: "non-existing",
 				},

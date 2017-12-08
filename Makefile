@@ -11,7 +11,6 @@ TEST_FLAGS :=-ginkgo.v
 
 GO_FILES :=$(shell find . -name '*.go' -not -path './vendor/*' -print)
 GO_PACKAGES := ./cmd/... ./pkg/...
-GO_PACKAGES_TEST :=./test/...
 GO_PACKAGES_ALL :=$(GOPACKAGES) $(GO_PACKAGES_TEST)
 GO_IMPORT_PATH :=github.com/tnozicka/openshift-acme
 IMAGE_NAME :=docker.io/tnozicka/openshift-acme
@@ -35,7 +34,9 @@ test:
 
 .PHONY: test-extended
 test-extended:
-	export KUBECONFIG=$(GO_ET_KUBECONFIG) && go test $(GOFLAGS) $(GO_PACKAGES_TEST) -domain="$(GO_ET_DOMAIN)" $(TEST_FLAGS)
+	export KUBECONFIG=$(GO_ET_KUBECONFIG) && \
+	export TEST_DOMAIN=$(GO_ET_DOMAIN) && \
+	go test $(GOFLAGS) ./test/e2e/openshift $(TEST_FLAGS)
 
 .PHONY: checks
 checks: check-gofmt check-goimports check-govet check-deploy-files

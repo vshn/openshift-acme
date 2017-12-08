@@ -237,7 +237,7 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	glog.V(4).Infof("Exposing route %s/%s has been admitted. %#v", createdRoute.Namespace, createdRoute.Name, createdRoute)
 
 	glog.V(4).Infof("Waiting 10s")
-	time.Sleep(2 * time.Second)
+	time.Sleep(10 * time.Second)
 	glog.V(4).Infof("Waiting 10s - done")
 
 	return e.underlyingExposer.Expose(c, domain, token)

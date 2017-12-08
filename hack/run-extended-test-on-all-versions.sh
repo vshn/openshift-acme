@@ -23,7 +23,7 @@ echo binaries: ${binaries}
 
 [[ ! -z "${binaries}" ]]
 
-make -j64 test-extended GOFLAGS='-i -race' TEST_FLAGS=''
+make -j64 test-extended GOFLAGS='-i -v -race' TEST_FLAGS=''
 
 function setupClusterWide() {
     tmpdir=$(mktemp -d)
@@ -39,9 +39,22 @@ function setupSingleNamespace() {
     cp -r deploy/letsencrypt-staging/single-namespace/* ${tmpdir}/
     sed -i 's/scheduled: true/scheduled: false/' ${tmpdir}/imagestream.yaml
     oc create -f${tmpdir}/{role,serviceaccount,imagestream,deployment}.yaml
-    oc policy add-role-to-user openshift-acme --role-namespace="$(oc project --short)" -z default
+    oc policy add-role-to-user openshift-acme --role-namespace="$(oc project --short)" -z openshift-acme
     export FIXED_NAMESPACE=$(oc project --short)
 }
+
+function failureTrap() {
+    oc get nodes
+    oc get all -n default
+    oc get all
+    oc get routes,svc --all-namespaces
+    oc logs deploy/openshift-acme
+
+    sleep 3
+}
+
+trap failureTrap ERR
+trap "sleep 3" EXIT
 
 for binary in ${binaries}; do
     version=${binary#$prefix}
@@ -49,7 +62,8 @@ for binary in ${binaries}; do
     ln -sfn ${binary} ${bindir}/oc
     oc version
 #    for setup in {setupClusterWide,setupSingleNamespace}; do
-    for setup in "setupSingleNamespace"; do
+    for setup in {setupSingleNamespace,setupClusterWide}; do
+#    for setup in "setupSingleNamespace"; do
         echo ${setup}
         oc cluster up --version=${version} --server-loglevel=4
         oc login -u system:admin
@@ -81,8 +95,9 @@ for binary in ${binaries}; do
 
         oc get all
         oc rollout status deploy/openshift-acme
+        oc get all
 
-        make -j64 test-extended GOFLAGS="-race" GO_ET_KUBECONFIG=~/.kube/config GO_ET_DOMAIN=${DOMAIN} || (oc logs deploy/openshift-acme; false)
+        make -j64 test-extended GOFLAGS="-v -race" GO_ET_KUBECONFIG=~/.kube/config GO_ET_DOMAIN=${DOMAIN} || (oc logs deploy/openshift-acme; false)
         oc logs deploy/openshift-acme
 
         oc get deploy/openshift-acme --template='deployed: {{(index .spec.template.spec.containers 0).image}}'

@@ -483,6 +483,9 @@ func (rc *RouteController) handle(key string) error {
 		case acme.StatusRevoked:
 			rc.recorder.Eventf(routeReadOnly, corev1.EventTypeWarning, "AcmeRevokedAuthorization", "Acme authorization has been revoked for domain %q: %s", routeReadOnly.Spec.Host, acmeclient.GetAuthorizationErrors(authorization))
 
+		case "deactivated":
+			glog.V(4).Infof("Authorization %q is %s.", authorization.URI, authorization.Status)
+
 		case acme.StatusProcessing:
 			fallthrough
 		default:

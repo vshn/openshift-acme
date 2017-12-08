@@ -66,11 +66,6 @@ script:
     bash -x hack/run-extended-test-on-all-versions.sh /tmp/oc
   fi
 
-after_failure:
-- |
-  oc login -u system:admin
-  oc logs -n default dc/router
-
 after_success:
 - |
   if [[ ${AUTHORITATIVE} && "${TRAVIS_BRANCH}" == "master" && "${TRAVIS_PULL_REQUEST}" == "false" ]]; then
