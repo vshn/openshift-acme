@@ -42,6 +42,7 @@ function failureTrap() {
     oc get all -n default
     oc get all
     oc get routes,svc --all-namespaces
+    oc get po -o yaml
     oc logs deploy/openshift-acme
 
     sleep 3
@@ -55,9 +56,7 @@ for binary in ${binaries}; do
     echo binary version: ${version}
     ln -sfn ${binary} ${bindir}/oc
     oc version
-#    for setup in {setupClusterWide,setupSingleNamespace}; do
-    for setup in {setupSingleNamespace,setupClusterWide}; do
-#    for setup in "setupSingleNamespace"; do
+    for setup in {setupClusterWide,setupSingleNamespace}; do
         echo ${setup}
         oc cluster up --version=${version} --server-loglevel=4
         oc login -u system:admin
@@ -95,6 +94,7 @@ for binary in ${binaries}; do
         oc get all
 
         make -j64 test-extended GOFLAGS="-v -race" GO_ET_KUBECONFIG=~/.kube/config GO_ET_DOMAIN=${DOMAIN} || (oc logs deploy/openshift-acme; false)
+        oc get all
         oc logs deploy/openshift-acme
 
         oc get deploy/openshift-acme --template='deployed: {{(index .spec.template.spec.containers 0).image}}'

@@ -42,7 +42,7 @@ const (
 	MaxRetries               = 1
 	RenewalStandardDeviation = 1
 	RenewalMean              = 0
-	AcmeTimeout              = 10 * time.Second
+	AcmeTimeout              = 60 * time.Second
 )
 
 var (
