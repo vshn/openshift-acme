@@ -1,0 +1,8 @@
+diff deploy/letsencrypt-live/cluster-wide/deployment.yaml deploy/letsencrypt-staging/cluster-wide/deployment.yaml
+32c32
+<           value: "https://acme-v01.api.letsencrypt.org/directory"
+---
+>           value: "https://acme-staging.api.letsencrypt.org/directory"
+diff deploy/letsencrypt-live/cluster-wide/README.md deploy/letsencrypt-staging/cluster-wide/README.md
+0a1
+> WARNING: **staging** is meant for testing with Let's Encrypt and will provide certificates signed by testing CA making the certs untrusted.

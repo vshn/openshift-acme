@@ -1,0 +1,8 @@
+diff deploy/letsencrypt-live/single-namespace/deployment.yaml deploy/letsencrypt-staging/single-namespace/deployment.yaml
+32c32
+<           value: "https://acme-v01.api.letsencrypt.org/directory"
+---
+>           value: "https://acme-staging.api.letsencrypt.org/directory"
+diff deploy/letsencrypt-live/single-namespace/README.md deploy/letsencrypt-staging/single-namespace/README.md
+0a1
+> WARNING: **staging** is meant for testing with Let's Encrypt and will provide certificates signed by testing CA making the certs untrusted.

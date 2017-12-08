@@ -1,0 +1,6 @@
+3,4c3,4
+<     oc create -fdeploy/{clusterrole,serviceaccount,imagestream,deployment}.yaml
+<     oc adm policy add-cluster-role-to-user openshift-acme -z openshift-acme
+---
+>     oc create -fdeploy/{role,serviceaccount,imagestream,deployment}.yaml
+>     oc policy add-role-to-user openshift-acme --role-namespace="$(oc project --short)" -z default

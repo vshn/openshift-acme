@@ -32,3 +32,7 @@ spec:
           value: "https://acme-v01.api.letsencrypt.org/directory"
         - name: OPENSHIFT_ACME_LOGLEVEL
           value: "4"
+        - name: OPENSHIFT_ACME_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace

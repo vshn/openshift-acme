@@ -38,8 +38,8 @@ function setupSingleNamespace() {
     tmpdir=$(mktemp -d)
     cp -r deploy/letsencrypt-staging/single-namespace/* ${tmpdir}/
     sed -i 's/scheduled: true/scheduled: false/' ${tmpdir}/imagestream.yaml
-    oc create -f${tmpdir}{role,serviceaccount,imagestream,deployment}.yaml
-    oc adm policy add-role-to-user openshift-acme -z openshift-acme
+    oc create -f${tmpdir}/{role,serviceaccount,imagestream,deployment}.yaml
+    oc policy add-role-to-user openshift-acme --role-namespace="$(oc project --short)" -z default
     export FIXED_NAMESPACE=$(oc project --short)
 }
 

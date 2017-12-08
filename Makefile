@@ -38,7 +38,7 @@ test-extended:
 	export KUBECONFIG=$(GO_ET_KUBECONFIG) && go test $(GOFLAGS) $(GO_PACKAGES_TEST) -domain="$(GO_ET_DOMAIN)" $(TEST_FLAGS)
 
 .PHONY: checks
-checks: check-gofmt check-goimports check-govet
+checks: check-gofmt check-goimports check-govet check-deploy-files
 
 .PHONY: check-gofmt
 check-gofmt:
@@ -55,6 +55,15 @@ check-goimports:
 .PHONY: check-govet
 check-govet:
 	go vet $(GO_PACKAGES_ALL)
+
+.PHONY: check-deploy-files
+check-deploy-files:
+	hack/diff-deploy-files.sh $(shell mktemp -d)
+
+.PHONY: update-deploy-files
+update-deploy-files:
+	mv ./deploy/.diffs/* $(shell mktemp -d)
+	hack/diff-deploy-files.sh ./deploy/.diffs
 
 .PHONY: check-vendor
 check-vendor:
