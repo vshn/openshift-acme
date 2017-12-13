@@ -188,7 +188,7 @@ func (f *Framework) AfterEach() {
 		nsDeletionErrors := map[string]error{}
 
 		if TestContext.DeleteTestingNSPolicy == DeleteTestingNSPolicyNever ||
-			(TestContext.DeleteTestingNSPolicy == DeleteTestingNSPolicyOnSuccess && !g.CurrentGinkgoTestDescription().Failed) {
+			(TestContext.DeleteTestingNSPolicy == DeleteTestingNSPolicyOnSuccess && g.CurrentGinkgoTestDescription().Failed) {
 			return
 		}
 

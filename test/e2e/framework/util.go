@@ -63,7 +63,6 @@ func CreateTestingNamespace(f *Framework, name string, labels map[string]string)
 
 func CreateProject(f *Framework, name string, labels map[string]string) (*v1.Namespace, error) {
 	Logf("************** %#v", labels)
-	//_, err := f.LegacyClient().ProjectRequests().Create(&projectapi.ProjectRequest{
 	_, err := f.ProjectClientset().ProjectV1().ProjectRequests().Create(&projectapiv1.ProjectRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,

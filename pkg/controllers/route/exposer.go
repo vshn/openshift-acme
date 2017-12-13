@@ -2,21 +2,26 @@ package route
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/golang/glog"
 	routev1 "github.com/openshift/api/route/v1"
 	routeclientset "github.com/openshift/client-go/route/clientset/versioned"
+	routeutil "github.com/tnozicka/openshift-acme/pkg/route"
+	"github.com/tnozicka/openshift-acme/pkg/util"
 	"golang.org/x/crypto/acme"
 	corev1 "k8s.io/api/core/v1"
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/tnozicka/openshift-acme/pkg/acme/challengeexposers"
 	"github.com/tnozicka/openshift-acme/pkg/api"
-	routeutil "github.com/tnozicka/openshift-acme/pkg/route"
 )
 
 const (
@@ -27,10 +32,10 @@ type Exposer struct {
 	underlyingExposer challengeexposers.Interface
 	routeClientset    routeclientset.Interface
 	kubeClientset     kubernetes.Interface
+	recorder          record.EventRecorder
 	exposerIP         string
 	exposerPort       int32
-
-	route *routev1.Route
+	route             *routev1.Route
 }
 
 var _ challengeexposers.Interface = &Exposer{}
@@ -38,18 +43,19 @@ var _ challengeexposers.Interface = &Exposer{}
 func NewExposer(underlyingExposer challengeexposers.Interface,
 	routeClientset routeclientset.Interface,
 	kubeClientset kubernetes.Interface,
-	route *routev1.Route,
+	recorder record.EventRecorder,
 	exposerIP string,
 	exposerPort int32,
+	route *routev1.Route,
 ) *Exposer {
 	return &Exposer{
 		underlyingExposer: underlyingExposer,
 		routeClientset:    routeClientset,
 		kubeClientset:     kubeClientset,
+		recorder:          recorder,
 		exposerIP:         exposerIP,
 		exposerPort:       exposerPort,
-
-		route: route,
+		route:             route,
 	}
 }
 
@@ -233,37 +239,83 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 			return fmt.Errorf("exceeded timeout %v while waiting for Route %s/%s to be admitted: %v", RouterAdmitTimeout, createdRoute.Namespace, createdRoute.Name, err)
 		}
 	}
-
 	glog.V(4).Infof("Exposing route %s/%s has been admitted. %#v", createdRoute.Namespace, createdRoute.Name, createdRoute)
-
-	glog.V(4).Infof("Waiting 10s")
-	time.Sleep(10 * time.Second)
-	glog.V(4).Infof("Waiting 10s - done")
 
 	err = e.underlyingExposer.Expose(c, domain, token)
 	if err != nil {
 		return fmt.Errorf("failed to expose challenge for Route %s/%s: ", e.route.Namespace, e.route.Name)
 	}
 
+	// We need to wait for Route to be accessible on the Router because because Route can be admitted but not exposed yet.
+	glog.V(4).Infof("Waiting for route %s/%s to be exposed on the router.", createdRoute.Namespace, createdRoute.Name)
+
+	url := "http://" + domain + c.HTTP01ChallengePath(token)
+	key, err := c.HTTP01ChallengeResponse(token)
+	if err != nil {
+		return fmt.Errorf("failed to compute key: %v", err)
+	}
+	err = wait.ExponentialBackoff(
+		wait.Backoff{
+			Duration: 1 * time.Second,
+			Factor:   1.3,
+			Jitter:   0.2,
+			Steps:    22,
+		},
+		func() (bool, error) {
+			response, err := http.Get(url)
+			if err != nil {
+				glog.Errorf("Failed to GET %q: %v", url, err)
+				return false, nil
+			}
+
+			defer response.Body.Close()
+
+			// No response should be longer that this, we need to prevent against DoS
+			buffer := make([]byte, 2048)
+			n, err := response.Body.Read(buffer)
+			if err != nil && err != io.EOF {
+				glog.Errorf("Failed to read response body into buffer: %v", err)
+				return false, nil
+			}
+			body := string(buffer[:n])
+
+			if response.StatusCode != http.StatusOK {
+				glog.V(3).Info("Failed to GET %q: %s: %s", url, response.Status, util.FirstNLines(util.MaxNCharacters(body, 160), 5))
+				return false, nil
+			}
+
+			if body != key {
+				glog.V(3).Infof("Key for route %s/%s is not yet exposed.", createdRoute.Namespace, createdRoute.Name)
+				return false, nil
+			}
+
+			return true, nil
+		},
+	)
+	if err != nil {
+		e.recorder.Event(e.route, "Controller failed to verify that exposing Route is accessible. It will continue with ACME validation but chances are that either exposing failed or your domain can't be reached from inside the cluster.", corev1.EventTypeWarning, "ExposingRouteNotVerified")
+	} else {
+		glog.V(4).Infof("Exposing Route %s/%s is accessible and contains correct response.")
+	}
+
 	return nil
 }
 
 func (e *Exposer) Remove(c *acme.Client, domain string, token string) error {
-	return nil
-	//// Name of the forwarding Service and Route
-	//exposingName := e.exposingTmpName()
-	//
-	//foregroundPolicy := metav1.DeletePropagationForeground
-	//
-	//glog.V(4).Infof("Deleting exposing Service and Route %s/%s.", e.route.Namespace, exposingName)
-	//
-	//// We need to delete only the Service as Route has ownerReference to it and will be GC'd.
-	//err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Delete(exposingName, &metav1.DeleteOptions{
-	//	PropagationPolicy: &foregroundPolicy,
-	//})
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//return e.underlyingExposer.Remove(c, domain, token)
+	// Name of the forwarding Service and Route
+	exposingName := e.exposingTmpName()
+
+	foregroundPolicy := metav1.DeletePropagationForeground
+
+	glog.V(4).Infof("Deleting exposing Service and Route %s/%s.", e.route.Namespace, exposingName)
+
+	// We need to delete only the Service as Route has ownerReference to it and will be GC'd.
+	err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Delete(exposingName, &metav1.DeleteOptions{
+		PropagationPolicy: &foregroundPolicy,
+	})
+	if err != nil {
+		return err
+	}
+
+	return e.underlyingExposer.Remove(c, domain, token)
 }

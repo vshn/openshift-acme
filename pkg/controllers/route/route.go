@@ -271,8 +271,7 @@ func (rc *RouteController) wrapExposers(exposers map[string]challengeexposers.In
 
 	for k, v := range exposers {
 		if k == "http-01" {
-			//wrapped[k] = NewExposer(v, rc.routeClientset, rc.kubeClientset, route, rc.selfServiceName, rc.selfServiceNamespace)
-			wrapped[k] = NewExposer(v, rc.routeClientset, rc.kubeClientset, route, rc.exposerIP, rc.exposerPort)
+			wrapped[k] = NewExposer(v, rc.routeClientset, rc.kubeClientset, rc.recorder, rc.exposerIP, rc.exposerPort, route)
 		} else {
 			wrapped[k] = v
 		}

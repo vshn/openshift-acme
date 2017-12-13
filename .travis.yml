@@ -2,9 +2,9 @@ language: go
 
 go_import_path: github.com/tnozicka/openshift-acme
 
-#go:
-#- 1.8.x
-#- 1.x.x
+go:
+- 1.8.x
+- 1.x.x
 
 matrix:
   include:
