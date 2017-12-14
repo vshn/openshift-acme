@@ -120,6 +120,13 @@ after_success:
     docker tag openshift-acme-candidate docker.io/tnozicka/openshift-acme
     docker push docker.io/tnozicka/openshift-acme
   fi
+  # TODO: remove this temporary hack
+  if [[ ${AUTHORITATIVE} && "${TRAVIS_BRANCH}" == "rewrite" ]]; then
+    docker login -u="${DOCKER_USER}" -p="${DOCKER_PASSWD}"
+    imagename=docker.io/tnozicka/openshift-acme:v0.8.0-pre-alpha
+    docker tag openshift-acme-candidate ${imagename}
+    docker push ${imagename}
+  fi
 
 notifications:
   email: false
