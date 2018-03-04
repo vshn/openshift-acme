@@ -11,9 +11,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 
+	"github.com/tnozicka/openshift-acme/pkg/api"
 	"github.com/tnozicka/openshift-acme/pkg/cert"
 	"github.com/tnozicka/openshift-acme/pkg/util"
 	"github.com/tnozicka/openshift-acme/test/e2e/framework"
@@ -21,7 +23,7 @@ import (
 )
 
 const (
-	RouteAdmissionTimeout          = 5 * time.Second
+	RouteAdmissionTimeout          = 10 * time.Second
 	CertificateProvisioningTimeout = 60 * time.Second
 	SyncTimeout                    = 30 * time.Second
 )
@@ -98,6 +100,40 @@ func validateSyncedSecret(f *framework.Framework, route *routev1.Route) {
 
 }
 
+func validateTemporaryObjectsAreDeleted(f *framework.Framework, route *routev1.Route) {
+	g.By("Validating that temporary objects are deleted")
+
+	tmpRoutes, err := f.RouteClientset().RouteV1().Routes(route.Namespace).List(metav1.ListOptions{
+		LabelSelector: labels.SelectorFromValidatedSet(labels.Set{
+			api.ExposerForLabelName: string(route.UID),
+		}).String(),
+	})
+	o.Expect(err).NotTo(o.HaveOccurred())
+	for _, tmpRoute := range tmpRoutes.Items {
+		o.Expect(tmpRoute.DeletionTimestamp).NotTo(o.BeNil())
+	}
+
+	tmpServices, err := f.KubeClientSet().CoreV1().Services(route.Namespace).List(metav1.ListOptions{
+		LabelSelector: labels.SelectorFromValidatedSet(labels.Set{
+			api.ExposerForLabelName: string(route.UID),
+		}).String(),
+	})
+	o.Expect(err).NotTo(o.HaveOccurred())
+	for _, tmpService := range tmpServices.Items {
+		o.Expect(tmpService.DeletionTimestamp).NotTo(o.BeNil())
+	}
+
+	tmpEndpoints, err := f.KubeClientSet().CoreV1().Endpoints(route.Namespace).List(metav1.ListOptions{
+		LabelSelector: labels.SelectorFromValidatedSet(labels.Set{
+			api.ExposerForLabelName: string(route.UID),
+		}).String(),
+	})
+	o.Expect(err).NotTo(o.HaveOccurred())
+	for _, tmpEndpoint := range tmpEndpoints.Items {
+		o.Expect(tmpEndpoint.DeletionTimestamp).NotTo(o.BeNil())
+	}
+}
+
 var _ = g.Describe("Routes", func() {
 	defer g.GinkgoRecover()
 	f := framework.NewFramework("routes")
@@ -154,6 +190,7 @@ var _ = g.Describe("Routes", func() {
 		o.Expect(cert.IsValid(crt, now)).To(o.BeTrue())
 
 		validateSyncedSecret(f, route)
+		validateTemporaryObjectsAreDeleted(f, route)
 
 		// ACME server will likely cache the validation for our domain and won't retry it so soon.
 		err = DeleteACMEAccountIfRequested(f, false)
@@ -188,6 +225,7 @@ var _ = g.Describe("Routes", func() {
 		o.Expect(cert.IsValid(crt, now)).To(o.BeTrue())
 
 		validateSyncedSecret(f, route)
+		validateTemporaryObjectsAreDeleted(f, route)
 
 		g.By("updating the synced Secret and seeing it reconciled")
 		secret, err := f.KubeClientSet().CoreV1().Secrets(route.Namespace).Patch(route.Name, types.StrategicMergePatchType, []byte(`{"data":{"tls.key":"", "tls.crt":""}}`))
@@ -199,6 +237,7 @@ var _ = g.Describe("Routes", func() {
 		o.Expect(err).NotTo(o.HaveOccurred(), "Failed to wait for Secret to be synced!")
 
 		validateSyncedSecret(f, route)
+		validateTemporaryObjectsAreDeleted(f, route)
 
 		g.By("deleting the synced Secret and seeing it recreated")
 		foregroundDeletion := metav1.DeletePropagationForeground
@@ -210,6 +249,7 @@ var _ = g.Describe("Routes", func() {
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		validateSyncedSecret(f, route)
+		validateTemporaryObjectsAreDeleted(f, route)
 	})
 
 	g.It("should have expired certificates replaced", func() {
@@ -223,6 +263,7 @@ var _ = g.Describe("Routes", func() {
 		notBefore := now.Add(-1 * time.Hour)
 		notAfter := now.Add(-1 * time.Minute)
 		certData, err := generateCertificate([]string{exutil.Domain()}, notBefore, notAfter)
+		o.Expect(err).NotTo(o.HaveOccurred())
 		certificate, err := certData.Certificate()
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(cert.IsValid(certificate, now)).To(o.BeFalse())
@@ -278,6 +319,7 @@ var _ = g.Describe("Routes", func() {
 		o.Expect(cert.IsValid(crt, now)).To(o.BeTrue())
 
 		validateSyncedSecret(f, route)
+		validateTemporaryObjectsAreDeleted(f, route)
 	})
 
 	g.It("should have unmatching certificates replaced", func() {
@@ -287,13 +329,14 @@ var _ = g.Describe("Routes", func() {
 		err := DeleteACMEAccountIfRequested(f, true)
 
 		g.By("creating new Route with unmatching certificate")
-		domain := "unmatching domain"
+		domain := "test.local"
 		o.Expect(domain).NotTo(o.Equal(exutil.Domain()))
 
 		now := time.Now()
 		notBefore := now.Add(-1 * time.Hour)
 		notAfter := now.Add(1 * time.Hour)
 		certData, err := generateCertificate([]string{domain}, notBefore, notAfter)
+		o.Expect(err).NotTo(o.HaveOccurred())
 		certificate, err := certData.Certificate()
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(certificate.DNSNames[0]).NotTo(o.Equal(exutil.Domain()))
@@ -350,5 +393,6 @@ var _ = g.Describe("Routes", func() {
 		o.Expect(certificate.DNSNames[0]).To(o.Equal(exutil.Domain()))
 
 		validateSyncedSecret(f, route)
+		validateTemporaryObjectsAreDeleted(f, route)
 	})
 })

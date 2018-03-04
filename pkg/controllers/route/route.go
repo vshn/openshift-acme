@@ -482,9 +482,10 @@ func (rc *RouteController) handle(key string) error {
 
 		glog.V(4).Infof("Route %q: authorization state is %q", key, authorization.Status)
 
+		exposers := rc.wrapExposers(rc.exposers, routeReadOnly)
+
 		switch authorization.Status {
 		case acme.StatusPending:
-			exposers := rc.wrapExposers(rc.exposers, routeReadOnly)
 			authorization, err := client.AcceptAuthorization(ctx, authorization, routeReadOnly.Spec.Host, exposers)
 			if err != nil {
 				return fmt.Errorf("failed to accept ACME authorization: %v", err)
@@ -561,6 +562,12 @@ func (rc *RouteController) handle(key string) error {
 			}
 
 			rc.recorder.Event(updatedRoute, corev1.EventTypeNormal, "AcmeCertificateProvisioned", "Successfully provided new certificate")
+
+			// Clean up tmp objects on success.
+			// We should make this more smart when we support more exposers.
+			for _, exposer := range exposers {
+				exposer.Remove(routeReadOnly.Spec.Host)
+			}
 
 		case acme.StatusInvalid:
 			rc.recorder.Eventf(routeReadOnly, corev1.EventTypeWarning, "AcmeFailedAuthorization", "Acme provider failed to validate domain %q: %s", routeReadOnly.Spec.Host, acmeclient.GetAuthorizationErrors(authorization))

@@ -10,5 +10,5 @@ type Interface interface {
 	Expose(c *acme.Client, domain string, token string) error
 
 	// Removes challenge
-	Remove(c *acme.Client, domain string, token string) error
+	Remove(domain string) error
 }

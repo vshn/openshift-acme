@@ -1,7 +1,9 @@
 package api
 
 const (
-	ForwardingRouteSuffing = "acme-forwarder"
+	ForwardingRouteSuffix = "acme"
+	ExposerLabelName      = "acme.openshift.io/exposer"
+	ExposerForLabelName   = "acme.openshift.io/exposer-for"
 )
 
 type AcmeState string

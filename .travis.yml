@@ -4,11 +4,12 @@ go_import_path: github.com/tnozicka/openshift-acme
 
 go:
 - 1.8.x
+- 1.9.x
 - 1.x.x
 
 matrix:
   include:
-  - go: 1.9.x
+  - go: 1.10.x
     env: AUTHORITATIVE=true"
     sudo: required
     services:

@@ -19,16 +19,18 @@ const (
 )
 
 type Http01 struct {
-	mapping map[string]string
-	mutex   sync.RWMutex
-	Addr    string
+	urlToToken   map[string]string
+	domainToUrls map[string][]string
+	mutex        sync.RWMutex
+	Addr         string
 }
 
 var _ Interface = &Http01{}
 
 func NewHttp01(ctx context.Context, addr string) (*Http01, error) {
 	s := &Http01{
-		mapping: make(map[string]string),
+		urlToToken:   make(map[string]string),
+		domainToUrls: make(map[string][]string),
 	}
 
 	mux := http.NewServeMux()
@@ -63,7 +65,7 @@ func (h *Http01) getKey(url string) (string, bool) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
-	key, found := h.mapping[url]
+	key, found := h.urlToToken[url]
 	return key, found
 }
 
@@ -100,19 +102,29 @@ func (h *Http01) Expose(a *acme.Client, domain string, token string) error {
 
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
-	// TODO: consider checking if there is already a value with same key
-	h.mapping[url] = key
+	h.urlToToken[url] = key
+	h.domainToUrls[domain] = append(h.domainToUrls[domain], url)
 
 	return nil
 }
 
-func (h *Http01) Remove(a *acme.Client, domain string, token string) error {
-	url := getHttp01Uri(a, domain, token)
+func (h *Http01) Remove(domain string) error {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	// TODO: consider checking if there is already a value with same key
-	delete(h.mapping, url)
+	urls, found := h.domainToUrls[domain]
+	if !found {
+		return fmt.Errorf("domain %q was not found", domain)
+	}
+
+	if len(urls) < 1 {
+		return fmt.Errorf("internal error, no register url for domain %q", domain)
+	}
+
+	for _, url := range urls {
+		delete(h.urlToToken, url)
+	}
+	delete(h.domainToUrls, domain)
 
 	return nil
 }

@@ -24,8 +24,6 @@ echo binaries: ${binaries}
 
 [[ ! -z "${binaries}" ]]
 
-make -j64 test-extended-install GOFLAGS='-v -race'
-
 function setupClusterWide() {
     tmpFile=$(mktemp)
     sed '/^spec:/a \ \ paused: true' deploy/letsencrypt-staging/cluster-wide/deployment.yaml > ${tmpFile}
@@ -115,7 +113,7 @@ for binary in ${binaries}; do
         timeout 1m oc rollout status deploy/openshift-acme
         oc get all
 
-        make -j64 test-extended GOFLAGS="-v -race" GO_ET_KUBECONFIG=~/.kube/config GO_ET_DOMAIN=${DOMAIN} || (oc logs deploy/openshift-acme; false)
+        make -j64 test-extended GOFLAGS="-v -race" KUBECONFIG=~/.kube/config TEST_DOMAIN=${DOMAIN} || (oc logs deploy/openshift-acme; false)
         oc get all
         oc logs deploy/openshift-acme
 

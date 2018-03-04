@@ -16,7 +16,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -27,8 +29,11 @@ import (
 )
 
 const (
-	RouterAdmitTimeout  = 30 * time.Second
-	GeneratedAnnotation = "acme.openshift.io/generated"
+	RouterAdmitTimeout     = 30 * time.Second
+	GeneratedAnnotation    = "acme.openshift.io/generated"
+	maxNameLength          = 63
+	randomLength           = 5
+	maxGeneratedNameLength = maxNameLength - randomLength
 )
 
 // TODO: move to a package
@@ -78,13 +83,74 @@ func NewExposer(underlyingExposer challengeexposers.Interface,
 	}
 }
 
-func (e *Exposer) exposingTmpName() string {
-	return fmt.Sprintf("%s-%s", e.route.Name, api.ForwardingRouteSuffing)
+func (e *Exposer) cleanupTmpObjects() error {
+	// All ownerRefs are bound to the temporary Route, so it's enough to delete only it
+	// and GC will take care of the rest.
+	routes, err := e.routeClientset.RouteV1().Routes(e.route.Namespace).List(metav1.ListOptions{
+		LabelSelector: labels.SelectorFromValidatedSet(labels.Set{
+			api.ExposerForLabelName: string(e.route.UID),
+		}).String(),
+	})
+	if err != nil {
+		if kapierrors.IsNotFound(err) {
+			return nil
+		}
+
+		return fmt.Errorf("failed to list old exposing Routes: %v", err)
+	}
+
+	var routesToDelete []*routev1.Route
+	for _, route := range routes.Items {
+		controllerRef := metav1.GetControllerOf(&route)
+		if controllerRef == nil {
+			glog.V(2).Infof("Ignoring Route %s/%s with missing controllerRef.", route.Namespace, route.Name)
+			continue
+		}
+
+		if controllerRef.UID != e.route.UID {
+			glog.V(2).Infof("Ignoring Route %s/%s with unmatching controllerRef.", route.Namespace, route.Name)
+			continue
+		}
+
+		routesToDelete = append(routesToDelete, &route)
+	}
+
+	for _, route := range routes.Items {
+		if route.DeletionTimestamp != nil {
+			continue
+		}
+
+		err = e.routeClientset.RouteV1().Routes(e.route.Namespace).Delete(route.Name, &metav1.DeleteOptions{
+			Preconditions: &metav1.Preconditions{
+				UID: &route.UID,
+			},
+		})
+		if err != nil && !(kapierrors.IsNotFound(err) || kapierrors.IsConflict(err)) {
+			return fmt.Errorf("failed to delete old exposing Route %s/%s: %v", route.Namespace, route.Name, err)
+		}
+	}
+
+	return nil
 }
 
 func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
-	// Name of the forwarding Service and Route
-	exposingName := e.exposingTmpName()
+	err := e.cleanupTmpObjects()
+	if err != nil {
+		return fmt.Errorf("failed to cleanup temporary exposing objects before creating new ones: %v", err)
+	}
+
+	trueVal := true
+
+	baseName := fmt.Sprintf("%s-%s-", e.route.Name, api.ForwardingRouteSuffix)
+	if len(baseName) > maxGeneratedNameLength {
+		baseName = baseName[:maxGeneratedNameLength]
+	}
+	exposerName := fmt.Sprintf("%s%s", baseName, utilrand.String(randomLength))
+
+	labels := map[string]string{
+		api.ExposerLabelName:    "true",
+		api.ExposerForLabelName: string(e.route.UID),
+	}
 
 	// Route can only point to a Service in the same namespace
 	// but we need to redirect ACME challenge to this controller
@@ -92,12 +158,13 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	// We avoid this limitation by creating a forwarding service and manual endpoints if needed.
 
 	/*
-	   Service
+		Route
+
+		Create Route to accept the traffic for ACME challenge.
 	*/
-	trueVal := true
-	service := &corev1.Service{
+	routeDef := &routev1.Route{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: exposingName,
+			Name: exposerName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: routev1.SchemeGroupVersion.String(),
@@ -107,6 +174,46 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 					Controller: &trueVal,
 				},
 			},
+			Labels: labels,
+		},
+		Spec: routev1.RouteSpec{
+			Host: domain,
+			Path: c.HTTP01ChallengePath(token),
+			To: routev1.RouteTargetReference{
+				Kind: "Service",
+				Name: exposerName,
+			},
+			TLS: &routev1.TLSConfig{
+				Termination:                   routev1.TLSTerminationEdge,
+				InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyAllow,
+			},
+		},
+	}
+	// TODO: Remove after https://github.com/openshift/origin/issues/14950 is fixed in all supported OpenShift versions
+	if e.route.Spec.TLS != nil && e.route.Spec.TLS.InsecureEdgeTerminationPolicy == routev1.InsecureEdgeTerminationPolicyRedirect {
+		routeDef.Spec.TLS.InsecureEdgeTerminationPolicy = routev1.InsecureEdgeTerminationPolicyRedirect
+	}
+
+	route, err := e.routeClientset.RouteV1().Routes(e.route.Namespace).Create(routeDef)
+	if err != nil {
+		return fmt.Errorf("failed to create exposing Route %s/%s: %v", routeDef.Namespace, routeDef.Name, err)
+	}
+
+	ownerRefToExposingRoute := metav1.OwnerReference{
+		APIVersion: corev1.SchemeGroupVersion.String(),
+		Kind:       "Route",
+		Name:       route.Name,
+		UID:        route.UID,
+	}
+
+	/*
+	   Service
+	*/
+	serviceDef := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            exposerName,
+			OwnerReferences: []metav1.OwnerReference{ownerRefToExposingRoute},
+			Labels:          labels,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:      corev1.ServiceTypeClusterIP,
@@ -115,16 +222,13 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	}
 
 	// We need to avoid requiring "endpoints/restricted" for regular user in single-namespace use case.
-	glog.Infof("route namespace: %q", e.route.Namespace)
-	glog.Infof("self namespace: %q", e.selfNamespace)
-	glog.Infof("self selector: %q", e.selfSelector)
 	unprivilegedSameNamespace := e.route.Namespace == e.selfNamespace && e.selfSelector != nil
 
 	// If we are in the same namespace as the controller, and self selector is set, point it directly to the pod using a selector.
 	// The selector shall be unique to this pod.
 	if unprivilegedSameNamespace {
-		service.Spec.Selector = e.selfSelector
-		service.Spec.Ports = []corev1.ServicePort{
+		serviceDef.Spec.Selector = e.selfSelector
+		serviceDef.Spec.Ports = []corev1.ServicePort{
 			{
 				Name: "http",
 				// Port that the controller http-01 exposer listens on
@@ -132,33 +236,12 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 				Protocol: corev1.ProtocolTCP,
 			},
 		}
-		glog.V(4).Infof("Using unprivileged traffic redirection for exposing Service %s/%s", e.route.Namespace, service.Name)
+		glog.V(4).Infof("Using unprivileged traffic redirection for exposing Service %s/%s", e.route.Namespace, serviceDef.Name)
 	}
 
-	createdService, err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Create(service)
+	service, err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Create(serviceDef)
 	if err != nil {
-		if !kapierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to create exposing Service %s/%s: %v", service.Namespace, service.Name, err)
-		}
-
-		glog.Warningf("Forwarding Service %s/%s already exists, forcing rewrite", createdService.Namespace, createdService.Name)
-
-		preexistingService, err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Get(service.Name, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to get exposing Service %s/%s before updating: %v", service.Namespace, service.Name, err)
-		}
-
-		service.ResourceVersion = preexistingService.ResourceVersion
-		createdService, err = e.kubeClientset.CoreV1().Services(e.route.Namespace).Update(service)
-		if err != nil {
-			return fmt.Errorf("failed to update exposing Service %s/%s: %v", service.Namespace, service.Name, err)
-		}
-	}
-	ownerRefToService := metav1.OwnerReference{
-		APIVersion: corev1.SchemeGroupVersion.String(),
-		Kind:       "Secret",
-		Name:       createdService.Name,
-		UID:        createdService.UID,
+		return fmt.Errorf("failed to create exposing Service %s/%s: %v", serviceDef.Namespace, serviceDef.Name, err)
 	}
 
 	if !unprivilegedSameNamespace {
@@ -167,10 +250,11 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 
 			Create endpoints which can point any namespace.
 		*/
-		endpoints := &corev1.Endpoints{
+		endpointsDef := &corev1.Endpoints{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            createdService.Name,
-				OwnerReferences: []metav1.OwnerReference{ownerRefToService},
+				Name:            service.Name,
+				OwnerReferences: []metav1.OwnerReference{ownerRefToExposingRoute},
+				Labels:          labels,
 			},
 			Subsets: []corev1.EndpointSubset{
 				{
@@ -190,82 +274,17 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 				},
 			},
 		}
-		createdEndpoints, err := e.kubeClientset.CoreV1().Endpoints(e.route.Namespace).Create(endpoints)
+		_, err = e.kubeClientset.CoreV1().Endpoints(e.route.Namespace).Create(endpointsDef)
 		if err != nil {
-			if !kapierrors.IsAlreadyExists(err) {
-				return fmt.Errorf("failed to create exposing Endpoints %s/%s: %v", e.route.Namespace, endpoints.Name, err)
-			}
-
-			glog.Warningf("Forwarding Endpoints %s/%s already exists, forcing rewrite", createdEndpoints.Namespace, createdEndpoints.Name)
-
-			preexistingEndpoints, err := e.kubeClientset.CoreV1().Endpoints(e.route.Namespace).Get(endpoints.Name, metav1.GetOptions{})
-			if err != nil {
-				return fmt.Errorf("failed to get exposing Endpoints %s/%s before updating: %v", e.route.Namespace, endpoints.Name, err)
-			}
-
-			endpoints.ResourceVersion = preexistingEndpoints.ResourceVersion
-			createdEndpoints, err = e.kubeClientset.CoreV1().Endpoints(e.route.Namespace).Update(endpoints)
-			if err != nil {
-				return fmt.Errorf("failed to update exposing Endpoints %s/%s: %v", e.route.Namespace, endpoints.Name, err)
-			}
+			return fmt.Errorf("failed to create exposing Endpoints %s/%s: %v", e.route.Namespace, endpointsDef.Name, err)
 		}
 	}
 
-	/*
-		Route
+	glog.V(4).Infof("Waiting for exposing route %s/%s to be admitted.", route.Namespace, route.Name)
 
-		Create Route to accept the traffic for ACME challenge.
-	*/
-	route := &routev1.Route{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            exposingName,
-			OwnerReferences: []metav1.OwnerReference{ownerRefToService},
-		},
-		Spec: routev1.RouteSpec{
-			Host: domain,
-			Path: c.HTTP01ChallengePath(token),
-			To: routev1.RouteTargetReference{
-				Kind: "Service",
-				Name: exposingName,
-			},
-			// TODO: check if setting TLS is still needed or file an issue in origin. I think it was connected
-			// to router badly matching subpaths on route for the same domain if only one of them was using TLS
-			TLS: &routev1.TLSConfig{
-				Termination:                   routev1.TLSTerminationEdge,
-				InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyAllow,
-			},
-		},
-	}
-	// TODO: Remove after https://github.com/openshift/origin/issues/14950 is fixed in all supported OpenShift versions
-	if e.route.Spec.TLS != nil && e.route.Spec.TLS.InsecureEdgeTerminationPolicy == routev1.InsecureEdgeTerminationPolicyRedirect {
-		route.Spec.TLS.InsecureEdgeTerminationPolicy = routev1.InsecureEdgeTerminationPolicyRedirect
-	}
-
-	createdRoute, err := e.routeClientset.RouteV1().Routes(e.route.Namespace).Create(route)
-	if err != nil {
-		if !kapierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to create exposing Route %s/%s: %v", e.route.Namespace, route.Name, err)
-		}
-
-		glog.Warningf("Forwarding Route %s/%s already exists, forcing rewrite", createdRoute.Namespace, createdRoute.Name)
-
-		preexistingRoute, err := e.routeClientset.RouteV1().Routes(e.route.Namespace).Get(route.Name, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to get exposing Route %s/%s before updating: %v", e.route.Namespace, route.Name, err)
-		}
-
-		route.ResourceVersion = preexistingRoute.ResourceVersion
-		createdRoute, err = e.routeClientset.RouteV1().Routes(e.route.Namespace).Update(route)
-		if err != nil {
-			return fmt.Errorf("failed to update exposing Route %s/%s: %v", e.route.Namespace, route.Name, err)
-		}
-	}
-
-	glog.V(4).Infof("Waiting for exposing route %s/%s to be admitted.", createdRoute.Namespace, createdRoute.Name)
-
-	if !routeutil.IsAdmitted(createdRoute) {
+	if !routeutil.IsAdmitted(route) {
 		// TODO: switch to informer to avoid broken watches
-		watcher, err := e.routeClientset.RouteV1().Routes(e.route.Namespace).Watch(metav1.SingleObject(createdRoute.ObjectMeta))
+		watcher, err := e.routeClientset.RouteV1().Routes(e.route.Namespace).Watch(metav1.SingleObject(route.ObjectMeta))
 		_, err = watch.Until(RouterAdmitTimeout, watcher, func(event watch.Event) (bool, error) {
 			switch event.Type {
 			case watch.Modified:
@@ -276,15 +295,15 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 
 				return false, nil
 			default:
-				return true, fmt.Errorf("unexpected event type %s while waiting for Route %s/%s to be admitted",
-					event.Type, createdRoute.Namespace, createdRoute.Name)
+				return true, fmt.Errorf("unexpected event type %q while waiting for Route %s/%s to be admitted",
+					event.Type, route.Namespace, route.Name)
 			}
 		})
 		if err != nil {
-			return fmt.Errorf("exceeded timeout %v while waiting for Route %s/%s to be admitted: %v", RouterAdmitTimeout, createdRoute.Namespace, createdRoute.Name, err)
+			return fmt.Errorf("exceeded timeout %v while waiting for Route %s/%s to be admitted: %v", RouterAdmitTimeout, route.Namespace, route.Name, err)
 		}
 	}
-	glog.V(4).Infof("Exposing route %s/%s has been admitted. %#v", createdRoute.Namespace, createdRoute.Name, createdRoute)
+	glog.V(4).Infof("Exposing route %s/%s has been admitted. Ingresses: %#v", route.Namespace, route.Name, route.Status.Ingress)
 
 	err = e.underlyingExposer.Expose(c, domain, token)
 	if err != nil {
@@ -292,7 +311,7 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	}
 
 	// We need to wait for Route to be accessible on the Router because because Route can be admitted but not exposed yet.
-	glog.V(4).Infof("Waiting for route %s/%s to be exposed on the router.", createdRoute.Namespace, createdRoute.Name)
+	glog.V(4).Infof("Waiting for route %s/%s to be exposed on the router.", route.Namespace, route.Name)
 
 	url := "http://" + domain + c.HTTP01ChallengePath(token)
 	key, err := c.HTTP01ChallengeResponse(token)
@@ -338,7 +357,7 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 			}
 
 			if body != key {
-				glog.V(3).Infof("Key for route %s/%s is not yet exposed.", createdRoute.Namespace, createdRoute.Name)
+				glog.V(3).Infof("Key for route %s/%s is not yet exposed.", route.Namespace, route.Name)
 				return false, nil
 			}
 
@@ -348,57 +367,22 @@ func (e *Exposer) Expose(c *acme.Client, domain string, token string) error {
 	if err != nil {
 		e.recorder.Event(e.route, "Controller failed to verify that exposing Route is accessible. It will continue with ACME validation but chances are that either exposing failed or your domain can't be reached from inside the cluster.", corev1.EventTypeWarning, "ExposingRouteNotVerified")
 	} else {
-		glog.V(4).Infof("Exposing Route %s/%s is accessible and contains correct response.", createdRoute.Namespace, createdRoute.Name)
+		glog.V(4).Infof("Exposing Route %s/%s is accessible and contains correct response.", route.Namespace, route.Name)
 	}
 
 	return nil
 }
 
-func (e *Exposer) Remove(c *acme.Client, domain string, token string) error {
-	// Name of the forwarding Service and Route
-	exposingName := e.exposingTmpName()
-
+func (e *Exposer) Remove(domain string) error {
+	var err error
 	var errs []error
 
-	err := func() error {
-		service, err := e.kubeClientset.CoreV1().Services(e.route.Namespace).Get(exposingName, metav1.GetOptions{})
-		if err != nil {
-			if !kapierrors.IsNotFound(err) {
-				return fmt.Errorf("failed to get Service %s/%s before removing: %v", e.route.Namespace, exposingName, err)
-			}
-
-			glog.Warningf("couldn't remove Service %s/%s because it doesn't exist anymore", e.route.Namespace, exposingName)
-			return nil
-		}
-
-		controllerRef := GetControllerRef(&service.ObjectMeta)
-
-		if controllerRef == nil || controllerRef.UID != e.route.UID {
-			glog.Warningf("won't remove Service %s/%s because Route %s/%s doesn't own it", e.route.Namespace, exposingName, e.route.Namespace, e.route.Name)
-			return nil
-		}
-
-		glog.V(4).Infof("Deleting exposing Service and Route %s/%s.", e.route.Namespace, exposingName)
-		foregroundPolicy := metav1.DeletePropagationForeground
-		preconditions := metav1.Preconditions{
-			UID: &service.UID,
-		}
-		// We need to delete only the Service as Route has ownerReference to it and will be GC'd.
-		err = e.kubeClientset.CoreV1().Services(e.route.Namespace).Delete(exposingName, &metav1.DeleteOptions{
-			PropagationPolicy: &foregroundPolicy,
-			Preconditions:     &preconditions,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to delete exposing Service %s/%s: %v", service.Namespace, service.Name, err)
-		}
-
-		return nil
-	}()
+	err = e.cleanupTmpObjects()
 	if err != nil {
-		errs = append(errs, err)
+		errs = append(errs, fmt.Errorf("failed to cleanup temporary exposing objects: %v", err))
 	}
 
-	err = e.underlyingExposer.Remove(c, domain, token)
+	err = e.underlyingExposer.Remove(domain)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to remove domain and token for Route %s/%s from underlying exposer: %v", e.route.Namespace, e.route.Name, err))
 	}
